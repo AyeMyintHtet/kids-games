@@ -1,12 +1,14 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Dimensions,
   StatusBar,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -26,8 +28,17 @@ import {
   Quicksand_700Bold,
 } from '@expo-google-fonts/quicksand';
 import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
 import { TactileButton } from '../src/components/TactileButton';
 import { Colors } from '../src/constants/colors';
+
+// Background music asset
+const BACKGROUND_MUSIC = require('../src/assets/sounds/learny_land_main_sound1.mp3');
+
+// Icon assets
+const SETTINGS_ICON = require('../src/assets/images/settings.png');
+const SPEAKER_ICON = require('../src/assets/images/speaker.png');
+const MUTE_ICON = require('../src/assets/images/mute.png');
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -199,15 +210,18 @@ const ScoreBadge: React.FC<{ score: number }> = ({ score }) => {
 /**
  * Settings button (top-left).
  */
-const SettingsButton: React.FC<{ onPress: () => void }> = ({ onPress }) => {
+const SettingsButton: React.FC = () => {
+  const router = useRouter();
+
   return (
     <TactileButton
-      onPress={onPress}
-      color={Colors.fun.purple}
+      onPress={() => router.push('/settings')}
+      color={Colors.white}
+      shadowColor="#A5B8D1" // Cloudy shadow
       size="small"
       style={styles.cornerButton}
     >
-      <Text style={styles.cornerButtonEmoji}>⚙️</Text>
+      <Image source={SETTINGS_ICON} style={styles.iconImage} />
     </TactileButton>
   );
 };
@@ -222,11 +236,15 @@ const SoundButton: React.FC<{ onPress: () => void; isMuted: boolean }> = ({
   return (
     <TactileButton
       onPress={onPress}
-      color={Colors.fun.purple}
+      color={Colors.white}
+      shadowColor="#A5B8D1" // Cloudy shadow
       size="small"
       style={styles.cornerButton}
     >
-      <Text style={styles.cornerButtonEmoji}>{isMuted ? '🔇' : '🔊'}</Text>
+      <Image
+        source={isMuted ? MUTE_ICON : SPEAKER_ICON}
+        style={styles.iconImage}
+      />
     </TactileButton>
   );
 };
@@ -264,6 +282,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [isMuted, setIsMuted] = React.useState(false);
   const [score] = React.useState(125);
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   const [fontsLoaded] = useFonts({
     Quicksand_400Regular,
@@ -271,6 +290,74 @@ export default function HomeScreen() {
     Quicksand_600SemiBold,
     Quicksand_700Bold,
   });
+
+  /**
+   * Background music setup.
+   * Plays looping background music when user enters the app.
+   */
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAndPlayMusic = async () => {
+      try {
+        // Configure audio mode for background music
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+
+        // Load the background music
+        const { sound } = await Audio.Sound.createAsync(
+          BACKGROUND_MUSIC,
+          {
+            isLooping: true,
+            volume: 0.5,
+            shouldPlay: true,
+          }
+        );
+
+        if (isMounted) {
+          soundRef.current = sound;
+        } else {
+          // Component unmounted before load finished
+          await sound.unloadAsync();
+        }
+      } catch (error) {
+        console.log('Error loading background music:', error);
+      }
+    };
+
+    loadAndPlayMusic();
+
+    // Cleanup: stop and unload music on unmount
+    return () => {
+      isMounted = false;
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+      }
+    };
+  }, []);
+
+  /**
+   * Handle mute/unmute for background music.
+   */
+  useEffect(() => {
+    const updateVolume = async () => {
+      if (soundRef.current) {
+        try {
+          const status = await soundRef.current.getStatusAsync();
+          if (status.isLoaded) {
+            await soundRef.current.setVolumeAsync(isMuted ? 0 : 0.5);
+          }
+        } catch (error) {
+          console.log('Error setting volume:', error);
+        }
+      }
+    };
+
+    updateVolume();
+  }, [isMuted]);
 
   // Title animation
   const titleScale = useSharedValue(1);
@@ -308,19 +395,9 @@ export default function HomeScreen() {
     // TODO: Navigate to videos
   }, []);
 
-  const handleSettingsPress = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    console.log('Settings pressed');
-  }, []);
-
   const handleSoundToggle = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsMuted((prev) => !prev);
-  }, []);
-
-  const handleParentGate = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    console.log('Parent gate pressed');
   }, []);
 
   if (!fontsLoaded) {
@@ -350,8 +427,12 @@ export default function HomeScreen() {
       {/* Floating clouds */}
       <FloatingCloud delay={0} startX={-100} top={verticalScale(60)} />
       <FloatingCloud delay={5000} startX={-150} top={verticalScale(120)} />
-      <FloatingCloud delay={8000} startX={-80} top={verticalScale(180)} />
-
+      <FloatingCloud delay={8000} startX={-60} top={verticalScale(180)} />
+      <FloatingCloud delay={7000} startX={-40} top={verticalScale(150)} />
+      <FloatingCloud delay={9000} startX={-20} top={verticalScale(120)} />
+      <FloatingCloud delay={3000} startX={-40} top={verticalScale(90)} />
+      <FloatingCloud delay={5000} startX={-70} top={verticalScale(60)} />
+      <FloatingCloud delay={6000} startX={-90} top={verticalScale(30)} />
       {/* Rainbow decoration */}
       <AnimatedRainbow />
 
@@ -361,14 +442,14 @@ export default function HomeScreen() {
 
       {/* Flowers */}
       <Text style={[styles.flower, { left: scale(20), bottom: verticalScale(80) }]}>🌸</Text>
-      <Text style={[styles.flower, { right: scale(30), bottom: verticalScale(90) }]}>�</Text>
+      <Text style={[styles.flower, { right: scale(30), bottom: verticalScale(90) }]}></Text>
       <Text style={[styles.flower, { left: scale(60), bottom: verticalScale(70) }]}>🌷</Text>
       <Text style={[styles.flower, { right: scale(70), bottom: verticalScale(75) }]}>🌻</Text>
 
       {/* Top controls */}
-      <View style={[styles.topControls, { paddingTop: insets.top + 10 }]}>
-        <SettingsButton onPress={handleSettingsPress} />
-        <ParentGateButton onPress={handleParentGate} />
+      <View style={styles.topControls}>
+        <SettingsButton />
+        <ParentGateButton onPress={() => console.log('Parent Gate')} />
       </View>
 
       {/* Main content */}
@@ -496,7 +577,7 @@ const styles = StyleSheet.create({
   },
   topControls: {
     position: 'absolute',
-    top: 0,
+    top: 50,
     left: 0,
     right: 0,
     flexDirection: 'row',
@@ -522,6 +603,11 @@ const styles = StyleSheet.create({
   },
   cornerButtonEmoji: {
     fontSize: scale(28),
+  },
+  iconImage: {
+    width: scale(32),
+    height: scale(32),
+    resizeMode: 'contain',
   },
   parentGateContainer: {
     alignItems: 'center',

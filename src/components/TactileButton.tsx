@@ -35,7 +35,7 @@ const SPRING_CONFIG = {
 
 interface TactileButtonProps {
   onPress: () => void;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   color: string;
   shadowColor?: string;
   size?: 'small' | 'medium' | 'large';
