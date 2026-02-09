@@ -1,0 +1,47 @@
+{
+  "name": "kids-games",
+  "slug": "kids-games",
+  "version": "1.0.0",
+  "orientation": "portrait",
+  "icon": "./src/assets/images/icon.png",
+  "scheme": "kids-games",
+  "userInterfaceStyle": "automatic",
+  "newArchEnabled": true,
+  "splash": {
+    "image": "./src/assets/images/icon.png",
+    "resizeMode": "contain",
+    "backgroundColor": "#ffffff"
+  },
+  "assetBundlePatterns": [
+    "**/*"
+  ],
+  "ios": {
+    "supportsTablet": true,
+    "bundleIdentifier": "com.ayemyinthtet.kidsgames"
+  },
+  "android": {
+    "adaptiveIcon": {
+      "foregroundImage": "./src/assets/images/icon.png",
+      "backgroundColor": "#ffffff"
+    },
+    "package": "com.ayemyinthtet.kidsgames"
+  },
+  "web": {
+    "bundler": "metro",
+    "output": "static",
+    "favicon": "./src/assets/images/icon.png"
+  },
+  "plugins": [
+    "expo-router",
+    "expo-font",
+    [
+      "expo-av",
+      {
+        "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone."
+      }
+    ]
+  ],
+  "experiments": {
+    "typedRoutes": true
+  }
+}
