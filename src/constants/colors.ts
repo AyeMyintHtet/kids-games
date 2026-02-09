@@ -1,74 +1,112 @@
 /**
- * Color constants for the Kids Games app.
- * Uses a vibrant, child-friendly palette.
+ * Color constants for Learny Land - 2026 Kid-Friendly Standards.
+ * Uses a vibrant, child-friendly palette with tactile design focus.
  */
 
 export const Colors = {
-  // Primary - Warm Orange (energetic and friendly)
+  // Primary - Rainbow Green (Growth/Correct)
   primary: {
-    50: '#fef3e2',
-    100: '#fce7c5',
-    200: '#f9cf8b',
-    300: '#f5b750',
-    400: '#f29f16',
-    500: '#e88b09', // Main primary
-    600: '#cc6c05',
-    700: '#a94d08',
-    800: '#893d0e',
-    900: '#72330f',
+    main: '#35D461',
+    light: '#5EE080',
+    dark: '#2AB84E',
+    50: '#E8F9ED',
+    100: '#C5F2D3',
+    200: '#9EEAB6',
+    300: '#77E299',
+    400: '#50DA7C',
+    500: '#35D461', // Main primary
+    600: '#2AB84E',
+    700: '#1F9C3B',
+    800: '#148028',
+    900: '#096415',
   },
 
-  // Secondary - Bright Blue (calm and trustworthy)
-  secondary: {
-    50: '#edf8ff',
-    100: '#d6eeff',
-    200: '#b5e2ff',
-    300: '#83d2ff',
-    400: '#48b6ff',
-    500: '#1e93ff', // Main secondary
-    600: '#0672ff',
-    700: '#0059eb',
-    800: '#0849be',
-    900: '#0d4195',
-  },
-
-  // Accent - Purple (magical and fun)
+  // Accent - Golden Yellow (Happiness/Stars)
   accent: {
-    50: '#fdf4ff',
-    100: '#fae8ff',
-    200: '#f5d0fe',
-    300: '#f0abfc',
-    400: '#e879f9',
-    500: '#d946ef', // Main accent
-    600: '#c026d3',
-    700: '#a21caf',
-    800: '#86198f',
-    900: '#701a75',
+    main: '#F9E104',
+    light: '#FAEB4D',
+    dark: '#D9C303',
+    50: '#FFFDE6',
+    100: '#FEF9BF',
+    200: '#FDF599',
+    300: '#FCF172',
+    400: '#FAED4C',
+    500: '#F9E104', // Main accent
+    600: '#D9C303',
+    700: '#B9A503',
+    800: '#998702',
+    900: '#796901',
+  },
+
+  // Danger - California Orange (Try Again - Not harsh red)
+  danger: {
+    main: '#F99D07',
+    light: '#FAB43F',
+    dark: '#D98606',
+    50: '#FEF4E6',
+    100: '#FCE3BF',
+    200: '#FBD299',
+    300: '#F9C172',
+    400: '#F8B04C',
+    500: '#F99D07', // Main danger
+    600: '#D98606',
+    700: '#B96F05',
+    800: '#995804',
+    900: '#794103',
+  },
+
+  // Secondary - Bright Blue (Learning/Exploration)
+  secondary: {
+    main: '#3B9EFF',
+    light: '#6BB5FF',
+    dark: '#2B87E0',
+    50: '#EDF8FF',
+    100: '#D6EEFF',
+    200: '#B5E2FF',
+    300: '#83D2FF',
+    400: '#48B6FF',
+    500: '#3B9EFF', // Main secondary
+    600: '#2B87E0',
+    700: '#1B70C0',
+    800: '#0B59A0',
+    900: '#004280',
+  },
+
+  // Fun Colors for variety
+  fun: {
+    pink: '#FF6B9D',
+    purple: '#A855F7',
+    coral: '#FF7F7F',
+    teal: '#2DD4BF',
+    lime: '#84CC16',
   },
 
   // Neutral grays
   neutral: {
-    50: '#fafafa',
-    100: '#f4f4f5',
-    200: '#e4e4e7',
-    300: '#d4d4d8',
-    400: '#a1a1aa',
-    500: '#71717a',
-    600: '#52525b',
-    700: '#3f3f46',
-    800: '#27272a',
-    900: '#18181b',
+    50: '#FAFAFA',
+    100: '#F5F5F5',
+    200: '#E5E5E5',
+    300: '#D4D4D4',
+    400: '#A3A3A3',
+    500: '#737373',
+    600: '#525252',
+    700: '#404040',
+    800: '#262626',
+    900: '#171717',
   },
 
   // Semantic colors
-  success: '#22c55e',
-  warning: '#f59e0b',
-  error: '#ef4444',
-  info: '#3b82f6',
+  success: '#35D461',
+  warning: '#F9E104',
+  error: '#F99D07',
+  info: '#3B9EFF',
 
-  // Background
-  background: '#ffffff',
-  backgroundDark: '#0f172a',
+  // Background colors
+  background: '#87CEEB', // Sky blue for outdoor feel
+  backgroundGradientTop: '#87CEEB',
+  backgroundGradientBottom: '#4CAF50', // Grass green
+  cream: '#FFF9E6',
+  white: '#FFFFFF',
 } as const;
 
 export type ColorScheme = typeof Colors;

@@ -1,10 +1,10 @@
 {
-  "name": "kids-games",
-  "slug": "kids-games",
+  "name": "Learny Land",
+  "slug": "learnyLand",
   "version": "1.0.0",
   "orientation": "portrait",
   "icon": "./src/assets/images/icon.png",
-  "scheme": "kids-games",
+  "scheme": "learnyLand",
   "userInterfaceStyle": "automatic",
   "newArchEnabled": true,
   "splash": {
@@ -17,14 +17,14 @@
   ],
   "ios": {
     "supportsTablet": true,
-    "bundleIdentifier": "com.ayemyinthtet.kidsgames"
+    "bundleIdentifier": "com.ayemyinthtet.learnyland"
   },
   "android": {
     "adaptiveIcon": {
       "foregroundImage": "./src/assets/images/icon.png",
       "backgroundColor": "#ffffff"
     },
-    "package": "com.ayemyinthtet.kidsgames"
+    "package": "com.ayemyinthtet.learnyland"
   },
   "web": {
     "bundler": "metro",

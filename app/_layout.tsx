@@ -1,9 +1,10 @@
 import '../global.css';
 import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
+import { SplashScreen } from '../src/components/SplashScreen';
 
 /**
  * TanStack Query client for data fetching and caching.
@@ -25,10 +26,26 @@ const queryClient = new QueryClient({
  * Provides global providers and navigation structure.
  */
 export default function RootLayout() {
+  const [isLoading, setIsLoading] = useState(true);
+
   useEffect(() => {
-    // Any app initialization logic can go here
-    // e.g., loading fonts, analytics setup, etc.
+    /**
+     * Simulates app initialization (loading fonts, assets, etc.)
+     * In a real app, you'd load actual resources here.
+     */
+    const initializeApp = async () => {
+      // TODO: Add actual initialization logic (fonts, assets, etc.)
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      setIsLoading(false);
+    };
+
+    initializeApp();
   }, []);
+
+  // Show splash screen while loading
+  if (isLoading) {
+    return <SplashScreen />;
+  }
 
   return (
     <GestureHandlerRootView style={styles.container}>
