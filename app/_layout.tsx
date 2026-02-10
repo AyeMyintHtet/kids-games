@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
 import { SplashScreen } from '../src/components/SplashScreen';
+import { Audio } from 'expo-av';
 
 /**
  * TanStack Query client for data fetching and caching.
@@ -21,30 +22,58 @@ const queryClient = new QueryClient({
   },
 });
 
+import { useFonts } from 'expo-font';
+import * as SplashScreenModule from 'expo-splash-screen';
+
+// Prevent auto-hiding the splash screen
+SplashScreenModule.preventAutoHideAsync();
+
 /**
  * Root Layout Component.
  * Provides global providers and navigation structure.
  */
 export default function RootLayout() {
-  const [isLoading, setIsLoading] = useState(true);
+  const [fontsLoaded] = useFonts({
+    'SuperWonder': require('../src/assets/font/Super Wonder.ttf'),
+  });
+
+  const [isAppReady, setIsAppReady] = useState(false);
 
   useEffect(() => {
-    /**
-     * Simulates app initialization (loading fonts, assets, etc.)
-     * In a real app, you'd load actual resources here.
-     */
     const initializeApp = async () => {
-      // TODO: Add actual initialization logic (fonts, assets, etc.)
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      setIsLoading(false);
+      try {
+        // Configure audio
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+
+        // Add minimum delay for splash animation
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      } catch (e) {
+        console.warn('Initialization failed:', e);
+      } finally {
+        setIsAppReady(true);
+      }
     };
 
     initializeApp();
   }, []);
 
-  // Show splash screen while loading
-  if (isLoading) {
-    return <SplashScreen />;
+  // Hide native splash screen once fonts are loaded so our custom one can show
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreenModule.hideAsync();
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded || !isAppReady) {
+    return (
+      <GestureHandlerRootView style={styles.container}>
+        <SplashScreen />
+      </GestureHandlerRootView>
+    );
   }
 
   return (

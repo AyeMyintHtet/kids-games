@@ -6,9 +6,9 @@
 export const Typography = {
   // Font families (ensure these are loaded with expo-font)
   fontFamily: {
-    sans: 'Inter',
-    display: 'Outfit',
-    rounded: 'Nunito', // Great for kids - friendly and readable
+    sans: 'SuperWonder',
+    display: 'SuperWonder',
+    rounded: 'SuperWonder', // Great for kids - friendly and readable
   },
 
   // Font sizes - larger for children's readability

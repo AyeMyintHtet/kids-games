@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     marginTop: 20, // Add a bit of breathing room from safe area
   },
   title: {
-    fontFamily: 'Quicksand_700Bold',
+    fontFamily: 'SuperWonder',
     fontSize: 32,
     color: Colors.white,
     textShadowColor: 'rgba(0,0,0,0.2)',
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   settingLabel: {
-    fontFamily: 'Quicksand_600SemiBold',
+    fontFamily: 'SuperWonder',
     fontSize: 20,
     color: Colors.neutral[700],
   },
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     marginBottom: 20
   },
   versionText: {
-    fontFamily: 'Quicksand_500Medium',
+    fontFamily: 'SuperWonder',
     color: Colors.neutral[500],
     fontSize: 14
   }

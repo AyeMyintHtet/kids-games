@@ -81,6 +81,20 @@ export const Colors = {
     lime: '#84CC16',
   },
 
+  // Candy colors for magical/playful animation effects (confetti, bubbles, sparkles)
+  candy: {
+    pink: '#FF80AB',
+    bubblegum: '#FF4081',
+    mint: '#64FFDA',
+    lavender: '#B388FF',
+    peach: '#FFAB91',
+    lemon: '#FFF176',
+    skyBlue: '#81D4FA',
+    lilac: '#CE93D8',
+    coral: '#FF8A80',
+    seafoam: '#A7FFEB',
+  },
+
   // Neutral grays
   neutral: {
     50: '#FAFAFA',
