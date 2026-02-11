@@ -3,9 +3,14 @@ import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, LogBox } from 'react-native';
 import { SplashScreen } from '../src/components/SplashScreen';
 import { Audio } from 'expo-av';
+
+LogBox.ignoreLogs([
+  'SafeAreaView has been deprecated',
+  'expo-av has been deprecated',
+]);
 
 /**
  * TanStack Query client for data fetching and caching.

@@ -1,29 +1,6 @@
 import { create } from 'zustand';
-import { MMKV } from 'react-native-mmkv';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createJSONStorage, persist } from 'zustand/middleware';
-
-/**
- * MMKV Storage instance.
- * Using MMKV for high-speed encrypted storage (COPPA/GDPR compliant).
- * 
- * SECURITY NOTE: Never store PII in unencrypted storage.
- * Use encryption for any user-identifiable data.
- */
-const storage = new MMKV({
-  id: 'kids-games-storage',
-  // Enable encryption for production
-  // encryptionKey: 'your-secure-key-from-env',
-});
-
-/**
- * Zustand storage adapter for MMKV.
- * Enables persistence of state across app restarts.
- */
-const mmkvStorage = createJSONStorage<AppState>(() => ({
-  setItem: (name, value) => storage.set(name, value),
-  getItem: (name) => storage.getString(name) ?? null,
-  removeItem: (name) => storage.delete(name),
-}));
 
 // -----------------------------------------------------------------------------
 // State Interfaces
@@ -70,7 +47,8 @@ const initialProgress: GameProgress = {
 };
 
 /**
- * Main app store using Zustand with MMKV persistence.
+ * Main app store using Zustand with AsyncStorage persistence.
+ * Switched to AsyncStorage to ensure compatibility with Expo Go.
  * 
  * Usage:
  * const { settings, updateSettings } = useAppStore();
@@ -109,7 +87,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'app-store',
-      storage: mmkvStorage,
+      storage: createJSONStorage(() => AsyncStorage),
     }
   )
 );

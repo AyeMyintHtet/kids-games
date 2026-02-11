@@ -40,6 +40,7 @@ const SPEAKER_ICON = require('../src/assets/images/speaker.png');
 const MUTE_ICON = require('../src/assets/images/mute.png');
 
 import { PopBox } from '../src/components/PopBox';
+import { ScoreBadge } from '../src/components/ScoreBadge';
 import { Switch } from 'react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -457,18 +458,6 @@ const AnimatedRainbow: React.FC = () => {
 };
 
 /**
- * Score badge component.
- */
-const ScoreBadge: React.FC<{ score: number }> = ({ score }) => {
-  return (
-    <View style={styles.scoreBadge}>
-      <Text style={styles.trophyEmoji}>🏆</Text>
-      <Text style={styles.scoreText}>SCORE: {score}</Text>
-    </View>
-  );
-};
-
-/**
  * Settings button (top-left).
  */
 /**
@@ -651,7 +640,6 @@ export default function HomeScreen() {
   const [isMuted, setIsMuted] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [language, setLanguage] = React.useState<'en' | 'es'>('en');
-  const [score] = React.useState(125);
   const soundRef = useRef<Audio.Sound | null>(null);
 
 
@@ -768,10 +756,10 @@ export default function HomeScreen() {
     console.log('Videos pressed');
   }, []);
 
-  const handleSoundToggle = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsMuted((prev) => !prev);
-  }, []);
+  // const handleSoundToggle = useCallback(() => {
+  //   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  //   setIsMuted((prev) => !prev);
+  // }, []);
 
 
 
@@ -934,7 +922,7 @@ export default function HomeScreen() {
       {/* Bottom controls */}
       <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 10 }]}>
         {/* <SoundButton onPress={handleSoundToggle} isMuted={isMuted} /> */}
-        <ScoreBadge score={score} />
+        <ScoreBadge />
       </View>
 
       {/* Settings PopBox */}
