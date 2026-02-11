@@ -748,8 +748,8 @@ export default function HomeScreen() {
 
   const handleLettersPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    console.log('Letters game pressed');
-  }, []);
+    router.push('/alphabet');
+  }, [router]);
 
   const handleVideosPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
