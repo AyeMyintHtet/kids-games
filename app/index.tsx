@@ -1,5 +1,5 @@
-import React, { useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'expo-router';
+import React, { useEffect, useCallback } from 'react';
+import { useCloudTransition } from '../src/hooks/useCloudTransition';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StatusBar,
   Image,
   TouchableOpacity,
+  Switch,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,12 +28,9 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import * as Haptics from 'expo-haptics';
-import { Audio } from 'expo-av';
 import { TactileButton } from '../src/components/TactileButton';
 import { Colors } from '../src/constants/colors';
-
-// Background music asset
-const BACKGROUND_MUSIC = require('../src/assets/sounds/learny_land_main_sound1.mp3');
+import { useMusic } from './_layout';
 
 // Icon assets
 const SETTINGS_ICON = require('../src/assets/images/settings.png');
@@ -41,7 +39,6 @@ const MUTE_ICON = require('../src/assets/images/mute.png');
 
 import { PopBox } from '../src/components/PopBox';
 import { ScoreBadge } from '../src/components/ScoreBadge';
-import { Switch } from 'react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -635,77 +632,11 @@ const LanguageDropdown: React.FC<{
  * - Responsive design for all devices
  */
 export default function HomeScreen() {
-  const router = useRouter();
+  const { navigateTo } = useCloudTransition();
   const insets = useSafeAreaInsets();
-  const [isMuted, setIsMuted] = React.useState(false);
+  const { isMuted, toggleMute } = useMusic();
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [language, setLanguage] = React.useState<'en' | 'es'>('en');
-  const soundRef = useRef<Audio.Sound | null>(null);
-
-
-
-  /**
-   * Background music setup.
-   */
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadAndPlayMusic = async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-        });
-
-        const { sound } = await Audio.Sound.createAsync(
-          BACKGROUND_MUSIC,
-          {
-            isLooping: true,
-            volume: 0.5,
-            shouldPlay: true,
-          }
-        );
-
-        if (isMounted) {
-          soundRef.current = sound;
-        } else {
-          await sound.unloadAsync();
-        }
-      } catch (error) {
-        console.log('Error loading background music:', error);
-      }
-    };
-
-    loadAndPlayMusic();
-
-    return () => {
-      isMounted = false;
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
-
-  /**
-   * Handle mute/unmute for background music.
-   */
-  useEffect(() => {
-    const updateVolume = async () => {
-      if (soundRef.current) {
-        try {
-          const status = await soundRef.current.getStatusAsync();
-          if (status.isLoaded) {
-            await soundRef.current.setVolumeAsync(isMuted ? 0 : 0.5);
-          }
-        } catch (error) {
-          console.log('Error setting volume:', error);
-        }
-      }
-    };
-
-    updateVolume();
-  }, [isMuted]);
 
   // Enhanced title animation — wobble + scale for playful, attention-grabbing feel
   const titleScale = useSharedValue(1);
@@ -743,13 +674,13 @@ export default function HomeScreen() {
   // Button handlers with haptic feedback
   const handleMathPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push('/math-game');
-  }, [router]);
+    navigateTo('/math-game');
+  }, [navigateTo]);
 
   const handleLettersPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    router.push('/alphabet');
-  }, [router]);
+    navigateTo('/alphabet');
+  }, [navigateTo]);
 
   const handleVideosPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -936,8 +867,8 @@ export default function HomeScreen() {
           <Text style={styles.settingLabel}>Music 🎵</Text>
           <Switch
             value={!isMuted}
-            onValueChange={(val) => {
-              setIsMuted(!val);
+            onValueChange={() => {
+              toggleMute();
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             }}
             trackColor={{ false: Colors.neutral[300], true: Colors.success }}

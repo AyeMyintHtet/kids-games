@@ -1,16 +1,34 @@
 import '../global.css';
 import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, LogBox } from 'react-native';
 import { SplashScreen } from '../src/components/SplashScreen';
-import { Audio } from 'expo-av';
+import { useBackgroundMusic } from '../src/hooks/useBackgroundMusic';
+import { CloudTransition } from '../src/components/CloudTransition';
+import { CloudTransitionProvider, useCloudTransition } from '../src/hooks/useCloudTransition';
 
 LogBox.ignoreLogs([
   'SafeAreaView has been deprecated',
   'expo-av has been deprecated',
 ]);
+
+/**
+ * Context to expose music mute control to any child screen.
+ */
+type MusicContextType = {
+  isMuted: boolean;
+  toggleMute: () => void;
+};
+
+const MusicContext = createContext<MusicContextType>({
+  isMuted: false,
+  toggleMute: () => { },
+});
+
+/** Consumer hook — use this in any screen to toggle music */
+export const useMusic = () => useContext(MusicContext);
 
 /**
  * TanStack Query client for data fetching and caching.
@@ -36,6 +54,7 @@ SplashScreenModule.preventAutoHideAsync();
 /**
  * Root Layout Component.
  * Provides global providers and navigation structure.
+ * Background music lives HERE so it never re-mounts on navigation.
  */
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -43,17 +62,20 @@ export default function RootLayout() {
   });
 
   const [isAppReady, setIsAppReady] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+
+  // Singleton music — plays once, survives all navigation
+  const { setMuted } = useBackgroundMusic();
+
+  const toggleMute = () => {
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    setMuted(newMuted);
+  };
 
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        // Configure audio
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-        });
-
         // Add minimum delay for splash animation
         await new Promise((resolve) => setTimeout(resolve, 3000));
       } catch (e) {
@@ -83,15 +105,38 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      <QueryClientProvider client={queryClient}>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: 'slide_from_right',
-          }}
-        />
-      </QueryClientProvider>
+      <MusicContext.Provider value={{ isMuted, toggleMute }}>
+        <QueryClientProvider client={queryClient}>
+          <CloudTransitionProvider>
+            <StackWithCloudOverlay />
+          </CloudTransitionProvider>
+        </QueryClientProvider>
+      </MusicContext.Provider>
     </GestureHandlerRootView>
+  );
+}
+
+/**
+ * Inner component that reads the cloud transition context
+ * and renders the Stack + CloudTransition overlay.
+ */
+function StackWithCloudOverlay() {
+  const { isActive, handleCovered, handleFinished } = useCloudTransition();
+
+  return (
+    <>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'none', // Disable native animation — cloud transition replaces it
+        }}
+      />
+      <CloudTransition
+        isActive={isActive}
+        onCovered={handleCovered}
+        onFinished={handleFinished}
+      />
+    </>
   );
 }
 
