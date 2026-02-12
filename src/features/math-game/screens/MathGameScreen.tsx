@@ -5,7 +5,8 @@ import {
   ImageBackground,
   StatusBar,
   Text,
-  Image,
+
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCloudTransition } from '@/hooks/useCloudTransition';
@@ -21,12 +22,17 @@ import { TactileButton } from '@/components/TactileButton';
 import { Colors } from '@/constants/colors';
 import { ScoreBadge } from '@/components/ScoreBadge';
 import { useAppStore } from '@/store/useAppStore';
+import { Image } from 'expo-image';
+import * as Haptics from 'expo-haptics';
 
 const BACKGROUND_IMAGE = require('@/assets/images/math/background.png');
 // Using the requested path for the board image
 // If this file does not exist, please ensure it is added to the assets folder.
 const BOARD_IMAGE = require('@/assets/images/math/board.png');
 const WRONG_IMAGE = require('@/assets/images/math/wrong.png');
+const PAUSE_ICON = require('@/assets/images/pause.png');
+const PLAY_ICON = require('@/assets/images/play.png');
+const CLOSE_ICON = require('@/assets/images/close.png');
 
 const generateQuestion = () => {
   // 1. Generate two random numbers (e.g., between 1 and 10)
@@ -57,12 +63,13 @@ const generateQuestion = () => {
 import { Audio } from 'expo-av';
 import { CelebrationEffect } from '@/components/CelebrationEffect';
 import { GameCountdown } from '@/components/GameCountdown';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const WRONG_SOUND = require('@/assets/sounds/wrong.mp3');
 const CORRECT_SOUND = require('@/assets/sounds/correct.mp3');
 const BRAVO_SOUND = require('@/assets/sounds/bravo.mp3');
 const EXCELLENT_SOUND = require('@/assets/sounds/excellent.mp3');
-
+const [showGiveUpModal, setShowGiveUpModal] = useState(false);
 // ... (existing imports)
 
 export const MathGameScreen = () => {
@@ -121,11 +128,14 @@ export const MathGameScreen = () => {
   // Animation Values
   const boardScale = useSharedValue(0);
   const contentOpacity = useSharedValue(1);
+  const pauseScale = useSharedValue(1);
 
   const contentAnimatedStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
   }));
-
+  const pauseAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pauseScale.value }],
+  }));
   const handleAnswer = (selectedAnswer: number) => {
     if (selectedAnswer === currentData.answer) {
       // Correct!
@@ -181,7 +191,10 @@ export const MathGameScreen = () => {
     transform: [{ scale: boardScale.value }],
   }));
 
-
+  const openGiveUpModal = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setShowGiveUpModal(true);
+  };
 
   return (
     <View style={styles.container}>
@@ -193,14 +206,11 @@ export const MathGameScreen = () => {
       >
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.header}>
-            {/* <TactileButton
-              onPress={() => router.back()}
-              color={Colors.candy.pink}
-              size="small"
-              style={styles.backButton}
-            >
-              <Text style={styles.backButtonText}>🏠</Text>
-            </TactileButton> */}
+            <Pressable onPress={openGiveUpModal} >
+              <Animated.View style={[styles.pauseButton, pauseAnimatedStyle]}>
+                <Image source={PAUSE_ICON} style={styles.pauseIcon} contentFit="contain" />
+              </Animated.View>
+            </Pressable>
             <View style={styles.titleContainer}>
               <Text style={styles.title}>Math Adventure</Text>
             </View>
@@ -278,6 +288,49 @@ export const MathGameScreen = () => {
           </View>
         </SafeAreaView>
       </ImageBackground>
+      {/* {showGiveUpModal && (
+        <View style={styles.modalBackdrop}>
+          <Animated.View style={[styles.giveUpModalCard, giveUpModalAnimatedStyle]}>
+            <LinearGradient
+              colors={['#FFFDF0', '#FFEFF8', '#EAF6FF']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.giveUpModalGradient}
+            >
+              <View style={styles.modalBubbleOne} />
+              <View style={styles.modalBubbleTwo} />
+              <View style={styles.modalBubbleThree} />
+
+              <Animated.View style={[styles.giveUpStickerWrap, stickerAnimatedStyle]}>
+                <Text style={styles.giveUpStickerText}>🫧 Break Time 🫧</Text>
+              </Animated.View>
+
+              <Animated.View style={[styles.giveUpMascotCircle, mascotAnimatedStyle]}>
+                <Text style={styles.giveUpMascot}>🐣</Text>
+              </Animated.View>
+
+              <Text style={styles.giveUpTitle}>Give Up For Now?</Text>
+              <Text style={styles.giveUpMessage}>
+                You can come back and play again anytime.
+              </Text>
+
+
+              <View style={styles.giveUpButtonsRow}>
+                <Pressable onPress={handleConfirmGiveUp}>
+                  <Animated.View style={closeIconAnimatedStyle}>
+                    <Image source={CLOSE_ICON} style={{ width: 60, height: 60 }} contentFit="contain" />
+                  </Animated.View>
+                </Pressable>
+                <Pressable onPress={handleCancelGiveUp}>
+                  <Animated.View style={playIconAnimatedStyle}>
+                    <Image source={PLAY_ICON} style={{ width: 60, height: 60 }} contentFit="contain" />
+                  </Animated.View>
+                </Pressable>
+              </View>
+            </LinearGradient>
+          </Animated.View>
+        </View>
+      )} */}
     </View>
   );
 };
@@ -408,6 +461,16 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.2)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
+  },
+  pauseButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 50,
+    height: 50,
+  },
+  pauseIcon: {
+    width: 50,
+    height: 50,
   },
   footer: {
     position: 'absolute',
