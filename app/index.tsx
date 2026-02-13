@@ -107,8 +107,8 @@ export default function HomeScreen() {
 
   const handleVideosPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    console.log('Videos pressed');
-  }, []);
+    navigateTo('/animal-flashcards');
+  }, [navigateTo]);
 
   // Bubble configurations — candy colors floating upward
   const bubbles = [
@@ -249,7 +249,7 @@ export default function HomeScreen() {
           </TactileButton>
         </Animated.View>
 
-        {/* Videos/Play button — bounces in third (900ms delay) */}
+        {/* Animal flashcards button — bounces in third (900ms delay) */}
         <Animated.View
           entering={BounceIn.delay(900).springify()}
           style={[styles.gameButtonWrapper, { marginBottom: scale(50) }]}
@@ -260,8 +260,8 @@ export default function HomeScreen() {
             size="large"
             style={styles.gameButton}
           >
-            <Text style={styles.playIcon}>▶️</Text>
-            <Text style={styles.chestEmoji}>📦</Text>
+            <Text style={styles.playIcon}>🐾</Text>
+            <Text style={styles.abcText}>ANIMALS</Text>
           </TactileButton>
         </Animated.View>
       </View>
