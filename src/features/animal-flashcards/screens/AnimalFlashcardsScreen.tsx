@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
+  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -233,16 +234,16 @@ type MemoryCardProps = {
 };
 
 const MemoryCard = ({ card, disabled, onPress, cardWidth, cardHeight }: MemoryCardProps) => {
-  const rotateY = useSharedValue(card.isFlipped || card.isMatched ? 180 : 0);
+  const flipProgress = useSharedValue(card.isFlipped || card.isMatched ? 1 : 0);
   const scaleValue = useSharedValue(1);
   const shakeX = useSharedValue(0);
 
   useEffect(() => {
-    rotateY.value = withTiming(card.isFlipped || card.isMatched ? 180 : 0, {
+    flipProgress.value = withTiming(card.isFlipped || card.isMatched ? 1 : 0, {
       duration: 340,
       easing: Easing.inOut(Easing.cubic),
     });
-  }, [card.isFlipped, card.isMatched, rotateY]);
+  }, [card.isFlipped, card.isMatched, flipProgress]);
 
   useEffect(() => {
     if (!card.isMatched) return;
@@ -266,10 +267,18 @@ const MemoryCard = ({ card, disabled, onPress, cardWidth, cardHeight }: MemoryCa
   const shellAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
       { perspective: 900 },
-      { rotateY: `${rotateY.value}deg` },
+      { rotateY: `${flipProgress.value * 180}deg` },
       { scale: scaleValue.value },
       { translateX: shakeX.value },
     ],
+  }));
+
+  const backFaceAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(flipProgress.value, [0, 0.45, 1], [1, 0, 0]),
+  }));
+
+  const frontFaceAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(flipProgress.value, [0, 0.55, 1], [0, 0, 1]),
   }));
 
   return (
@@ -279,17 +288,19 @@ const MemoryCard = ({ card, disabled, onPress, cardWidth, cardHeight }: MemoryCa
       style={[styles.cardPressable, { width: cardWidth, height: cardHeight }]}
     >
       <Animated.View style={[styles.cardShell, shellAnimatedStyle]}>
-        <LinearGradient
-          colors={['#2D8EEB', '#4EC4FF']}
-          start={{ x: 0.2, y: 0 }}
-          end={{ x: 0.8, y: 1 }}
-          style={[styles.cardFace, { borderRadius: cardWidth * 0.18 }]}
-        >
-          <Text style={[styles.cardBackIcon, { fontSize: cardWidth * 0.3 }]}>🐠</Text>
-          <Text style={[styles.cardBackQuestion, { fontSize: cardWidth * 0.26 }]}>?</Text>
-        </LinearGradient>
+        <Animated.View style={[styles.cardFace, backFaceAnimatedStyle, { borderRadius: cardWidth * 0.18 }]}>
+          <LinearGradient
+            colors={['#2D8EEB', '#4EC4FF']}
+            start={{ x: 0.2, y: 0 }}
+            end={{ x: 0.8, y: 1 }}
+            style={[styles.cardBackGradient, { borderRadius: cardWidth * 0.18 }]}
+          >
+            <Text style={[styles.cardBackIcon, { fontSize: cardWidth * 0.3 }]}>🐠</Text>
+            <Text style={[styles.cardBackQuestion, { fontSize: cardWidth * 0.26 }]}>?</Text>
+          </LinearGradient>
+        </Animated.View>
 
-        <View style={[styles.cardFace, styles.cardFront, { backgroundColor: card.cardColor, borderRadius: cardWidth * 0.18 }]}>
+        <Animated.View style={[styles.cardFace, styles.cardFront, frontFaceAnimatedStyle, { backgroundColor: card.cardColor, borderRadius: cardWidth * 0.18 }]}>
           {card.imageSource ? (
             <Image
               source={card.imageSource}
@@ -300,7 +311,7 @@ const MemoryCard = ({ card, disabled, onPress, cardWidth, cardHeight }: MemoryCa
             <Text style={[styles.cardAnimalEmoji, { fontSize: cardWidth * 0.34 }]}>{card.emoji}</Text>
           )}
           <Text style={[styles.cardAnimalName, { fontSize: Math.max(11, cardWidth * 0.16) }]}>{card.name}</Text>
-        </View>
+        </Animated.View>
       </Animated.View>
     </Pressable>
   );
@@ -1010,6 +1021,11 @@ const styles = StyleSheet.create({
   },
   cardBackIcon: {
     fontSize: scale(24),
+  },
+  cardBackGradient: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardBackQuestion: {
     marginTop: verticalScale(6),
