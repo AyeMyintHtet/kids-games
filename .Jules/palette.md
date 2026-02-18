@@ -1,0 +1,3 @@
+## 2026-02-18 - Accessibility in Kid-Focused UI
+**Learning:** Custom interactive components like `TactileButton` often lose native accessibility traits when built from scratch with gesture handlers. Explicitly adding `accessibilityRole="button"` and meaningful labels is crucial so screen readers don't just see "View". For icon-heavy interfaces like "Learny Land", visual text like "1+2=?" isn't enough context for assistive tech; "Start Math Game" is much clearer.
+**Action:** Always verify custom gesture components expose accessibility props and test that icon-only buttons have descriptive labels.

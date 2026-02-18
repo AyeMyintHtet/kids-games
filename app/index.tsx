@@ -227,6 +227,8 @@ export default function HomeScreen() {
             color="#FF6B6B"
             size="large"
             style={styles.gameButton}
+            accessibilityLabel="Start Math Game"
+            accessibilityHint="Play a math game with numbers"
           >
             <Text style={styles.gameButtonText}>1+2=?</Text>
             <Text style={styles.gameButtonEmoji}>🚀</Text>
@@ -243,6 +245,8 @@ export default function HomeScreen() {
             color={Colors.secondary.main}
             size="large"
             style={styles.gameButton}
+            accessibilityLabel="Start Alphabet Game"
+            accessibilityHint="Learn the alphabet"
           >
             <Text style={styles.gameButtonEmoji}>🔤</Text>
             <Text style={styles.abcText}>ABC</Text>
@@ -259,6 +263,8 @@ export default function HomeScreen() {
             color={Colors.primary.main}
             size="large"
             style={styles.gameButton}
+            accessibilityLabel="Watch Animal Videos"
+            accessibilityHint="Watch videos about animals"
           >
             <Text style={styles.playIcon}>🐾</Text>
             <Text style={styles.abcText}>ANIMALS</Text>

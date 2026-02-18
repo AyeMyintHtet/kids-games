@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { StyleSheet, Dimensions, ViewStyle, TextStyle } from 'react-native';
+import { StyleSheet, Dimensions, ViewStyle, TextStyle, AccessibilityRole, AccessibilityState } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -51,6 +51,10 @@ interface TactileButtonProps {
   emoji?: string;
   label?: string;
   playSound?: boolean;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  accessibilityRole?: AccessibilityRole;
+  accessibilityState?: AccessibilityState;
 }
 
 /**
@@ -75,6 +79,10 @@ export const TactileButton: React.FC<TactileButtonProps> = ({
   emoji,
   label,
   playSound = true,
+  accessibilityLabel,
+  accessibilityHint,
+  accessibilityRole = 'button',
+  accessibilityState,
 }) => {
   const scale = useSharedValue(1);
   const pressed = useSharedValue(false);
@@ -233,6 +241,11 @@ export const TactileButton: React.FC<TactileButtonProps> = ({
           disabled && styles.disabled,
           style,
         ]}
+        accessible={true}
+        accessibilityLabel={accessibilityLabel || label || emoji}
+        accessibilityHint={accessibilityHint}
+        accessibilityRole={accessibilityRole}
+        accessibilityState={{ disabled, ...accessibilityState }}
       >
         {emoji && <Animated.Text style={styles.emoji}>{emoji}</Animated.Text>}
         {label && (

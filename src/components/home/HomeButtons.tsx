@@ -17,6 +17,8 @@ export const SettingsButton: React.FC<{ onPress: () => void }> = ({ onPress }) =
       shadowColor="#A5B8D1"
       size="small"
       style={styles.cornerButton}
+      accessibilityLabel="Settings"
+      accessibilityHint="Opens the settings menu"
     >
       <Image source={SETTINGS_ICON} style={styles.iconImage} />
     </TactileButton>
@@ -34,6 +36,8 @@ export const SoundButton: React.FC<{ onPress: () => void; isMuted: boolean }> = 
       shadowColor="#A5B8D1"
       size="small"
       style={styles.cornerButton}
+      accessibilityLabel={isMuted ? "Unmute sound" : "Mute sound"}
+      accessibilityHint="Toggles background music and sound effects"
     >
       <Image
         source={isMuted ? MUTE_ICON : SPEAKER_ICON}
@@ -51,6 +55,8 @@ export const ParentGateButton: React.FC<{ onPress: () => void }> = ({ onPress })
         color={Colors.fun.purple}
         size="small"
         style={styles.cornerButton}
+        accessibilityLabel="Parent Gate"
+        accessibilityHint="Access information for parents"
       >
         <Text style={styles.cornerButtonEmoji}>ℹ️</Text>
       </TactileButton>
