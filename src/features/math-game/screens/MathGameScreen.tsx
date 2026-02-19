@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,6 +6,7 @@ import {
   StatusBar,
   Text,
   Pressable,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCloudTransition } from '@/hooks/useCloudTransition';
@@ -26,7 +27,26 @@ import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 import { CelebrationEffect } from '@/components/CelebrationEffect';
 import { GameCountdown } from '@/components/GameCountdown';
-
+import { GiveUpModal } from '@/components/GiveUpModal';
+import { RoundResultPopup } from '@/components/RoundResultPopup';
+import { generateMathQuestion } from '@/features/math-game/model/question';
+import {
+  getMathLevelConfig,
+  type MathOperation,
+} from '@/features/progression/model/progression';
+import {
+  applyScoreFormula,
+  getComboBonus,
+  getSpeedBonus,
+  toAccuracy,
+} from '@/features/score/model/scoring';
+import {
+  isSmallHeightDevice,
+  isVerySmallHeightDevice,
+  scale,
+  verticalScale,
+} from '@/utils/responsive';
+import type { RoundSummary } from '@/store/useAppStore';
 
 const BACKGROUND_IMAGE = require('@/assets/images/math/background.png');
 // Using the requested path for the board image
@@ -34,35 +54,6 @@ const BACKGROUND_IMAGE = require('@/assets/images/math/background.png');
 const BOARD_IMAGE = require('@/assets/images/math/board.png');
 const WRONG_IMAGE = require('@/assets/images/math/wrong.png');
 const PAUSE_ICON = require('@/assets/images/pause.png');
-import { GiveUpModal } from '@/components/GiveUpModal';
-
-const generateQuestion = () => {
-  // 1. Generate two random numbers (e.g., between 1 and 10)
-  const num1 = Math.floor(Math.random() * 10) + 1;
-  const num2 = Math.floor(Math.random() * 10) + 1;
-  const correctAnswer = num1 + num2;
-
-  // 2. Generate unique random distractors
-  const options = new Set<number>();
-  options.add(correctAnswer);
-
-  while (options.size < 6) {
-    // Generate numbers near the answer to make it challenging
-    const distractor = Math.max(1, correctAnswer + (Math.floor(Math.random() * 7) - 3));
-    options.add(distractor);
-  }
-
-  // 3. Shuffle the array so the answer isn't always in the same spot
-  const shuffledOptions = Array.from(options).sort(() => Math.random() - 0.5);
-
-  return {
-    question: `${num1} + ${num2} =`,
-    answer: correctAnswer,
-    choices: shuffledOptions,
-  };
-};
-
-
 
 const WRONG_SOUND = require('@/assets/sounds/wrong.mp3');
 const CORRECT_SOUND = require('@/assets/sounds/correct.mp3');
@@ -75,6 +66,48 @@ export const MathGameScreen = () => {
   const { goBack } = useCloudTransition();
   const [sound, setSound] = useState<Audio.Sound>();
   const [showGiveUpModal, setShowGiveUpModal] = useState(false);
+  const difficulty = useAppStore((state) => state.settings.difficulty);
+  const addScore = useAppStore((state) => state.addScore);
+  const recordGameResult = useAppStore((state) => state.recordGameResult);
+  const currentLevel = useAppStore((state) => state.progression.games.math.currentLevel);
+  const setCurrentGameLevel = useAppStore((state) => state.setCurrentGameLevel);
+  const activateRecoveryMode = useAppStore((state) => state.activateRecoveryMode);
+  const mathOperationPrefs = useAppStore((state) => state.settings.mathOperationPrefs);
+  const levelConfig = useMemo(() => getMathLevelConfig(currentLevel), [currentLevel]);
+  const parentEnabledOperations = useMemo<MathOperation[]>(() => {
+    const operationOrder: MathOperation[] = ['add', 'subtract', 'multiply', 'modulo'];
+    const enabled = operationOrder.filter((operation) => mathOperationPrefs[operation]);
+    return enabled.length > 0 ? enabled : ['add'];
+  }, [mathOperationPrefs]);
+  const isCompact = isSmallHeightDevice;
+  const isVeryCompact = isVerySmallHeightDevice;
+  const boardHeight = isVeryCompact ? verticalScale(148) : isCompact ? verticalScale(176) : 200;
+  const questionFontSize = isVeryCompact ? scale(44) : isCompact ? scale(54) : 64;
+  const questionMarkSize = isVeryCompact ? scale(58) : isCompact ? scale(68) : 80;
+  const answersTopMargin = isVeryCompact ? verticalScale(18) : isCompact ? verticalScale(26) : 40;
+  const answersContainerWidth = isVeryCompact ? '92%' : isCompact ? '88%' : '80%';
+  const answerButtonHeight = isVeryCompact ? verticalScale(76) : isCompact ? verticalScale(86) : 100;
+  const answerTextSize = isVeryCompact ? scale(30) : isCompact ? scale(36) : 40;
+  const headerRightWidth = isVeryCompact ? scale(130) : isCompact ? scale(140) : 150;
+  const headerSidePadding = isVeryCompact ? scale(12) : scale(20);
+  const titleFontSize = isVeryCompact ? scale(20) : isCompact ? scale(22) : 24;
+  const wrongIconSize = isVeryCompact ? scale(44) : isCompact ? scale(52) : 60;
+  const headerTopPadding = isVeryCompact ? verticalScale(2) : verticalScale(10);
+  const roundQuestionCount = levelConfig.questionCount;
+  const createQuestionForLevel = (level: number) => {
+    const config = getMathLevelConfig(level);
+    const operationsForLevel = config.operations.filter((operation) =>
+      parentEnabledOperations.includes(operation)
+    );
+    const operationsForQuestion =
+      operationsForLevel.length > 0 ? operationsForLevel : parentEnabledOperations;
+    return generateMathQuestion({
+      minOperand: config.minOperand,
+      maxOperand: config.maxOperand,
+      operations: operationsForQuestion,
+      choicesCount: 6,
+    });
+  };
   // Cleanup sound
   useEffect(() => {
     return sound
@@ -118,11 +151,21 @@ export const MathGameScreen = () => {
 
   // Game Phase State — simplified with GameCountdown handling intro + countdown
   const [gamePhase, setGamePhase] = useState<'intro' | 'countdown' | 'playing'>('intro');
-  const [currentData, setCurrentData] = useState(generateQuestion());
-  const { incrementScore } = useAppStore();
+  const [currentData, setCurrentData] = useState(() =>
+    createQuestionForLevel(currentLevel)
+  );
   const [wrongAnswer, setWrongAnswer] = useState<number | null>(null);
   const [streak, setStreak] = useState(0);
   const [celebrationTrigger, setCelebrationTrigger] = useState(0);
+  const [roundScore, setRoundScore] = useState(0);
+  const [correctCount, setCorrectCount] = useState(0);
+  const [wrongCount, setWrongCount] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [questionStartedAt, setQuestionStartedAt] = useState(Date.now());
+  const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
+  const [answeredCount, setAnsweredCount] = useState(0);
+  const [roundSummary, setRoundSummary] = useState<RoundSummary | null>(null);
+  const [showRoundResult, setShowRoundResult] = useState(false);
 
   // Animation Values
   const boardScale = useSharedValue(0);
@@ -135,15 +178,81 @@ export const MathGameScreen = () => {
   const pauseAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pauseScale.value }],
   }));
+
+  const resetRound = (targetLevel?: number) => {
+    const levelToUse = targetLevel ?? currentLevel;
+    setCurrentData(createQuestionForLevel(levelToUse));
+    setWrongAnswer(null);
+    setStreak(0);
+    setCelebrationTrigger(0);
+    setRoundScore(0);
+    setCorrectCount(0);
+    setWrongCount(0);
+    setBestStreak(0);
+    setQuestionStartedAt(Date.now());
+    setSessionStartedAt(null);
+    setAnsweredCount(0);
+    setRoundSummary(null);
+    setShowRoundResult(false);
+    setGamePhase('intro');
+  };
+
+  const finishRound = (outcome: 'won' | 'quit' | 'lost') => {
+    const safeCorrect = outcome === 'won' ? correctCount : Math.max(0, correctCount);
+    const summary = recordGameResult({
+      game: 'math',
+      score: roundScore,
+      timeMs: sessionStartedAt ? Date.now() - sessionStartedAt : null,
+      accuracy: toAccuracy(safeCorrect, wrongCount),
+      streak: bestStreak,
+      level: currentLevel,
+      hintsUsed: wrongCount > 0,
+      outcome,
+    });
+    setRoundSummary(summary);
+    setShowRoundResult(true);
+  };
+
+  useEffect(() => {
+    resetRound(currentLevel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLevel]);
+
   const handleAnswer = (selectedAnswer: number) => {
     if (selectedAnswer === currentData.answer) {
       // Correct!
-      incrementScore(10);
+      const responseMs = Date.now() - questionStartedAt;
       setWrongAnswer(null); // Clear previous wrong answer
 
       const newStreak = streak + 1;
+      const nextCorrectCount = correctCount + 1;
+      const nextAnsweredCount = answeredCount + 1;
       setStreak(newStreak);
+      const nextBestStreak = Math.max(bestStreak, newStreak);
+      setBestStreak(nextBestStreak);
       setCelebrationTrigger(prev => prev + 1); // Trigger celebration
+      setCorrectCount(nextCorrectCount);
+      setAnsweredCount(nextAnsweredCount);
+
+      const earnedPoints = applyScoreFormula({
+        basePoints: 10,
+        speedBonus: getSpeedBonus(responseMs, {
+          fastMs: 2000,
+          mediumMs: 4000,
+          fastBonus: 5,
+          mediumBonus: 2,
+          slowBonus: 0,
+        }),
+        comboBonus: getComboBonus(newStreak, {
+          startAt: 3,
+          maxBonus: 6,
+        }),
+        difficulty,
+      });
+
+      addScore('math', earnedPoints);
+      const nextRoundScore = roundScore + earnedPoints;
+      setRoundScore(nextRoundScore);
 
       // Play sound
       if (newStreak % 3 === 0) {
@@ -159,15 +268,33 @@ export const MathGameScreen = () => {
         withDelay(700, withTiming(1, { duration: 250 })) // Wait 700ms then reappear
       );
 
+      if (nextAnsweredCount >= roundQuestionCount) {
+        const summary = recordGameResult({
+          game: 'math',
+          score: nextRoundScore,
+          timeMs: sessionStartedAt ? Date.now() - sessionStartedAt : null,
+          accuracy: toAccuracy(nextCorrectCount, wrongCount),
+          streak: nextBestStreak,
+          level: currentLevel,
+          hintsUsed: wrongCount > 0,
+          outcome: 'won',
+        });
+        setRoundSummary(summary);
+        setShowRoundResult(true);
+        return;
+      }
+
       // Change data while hidden (after 200ms)
       setTimeout(() => {
-        setCurrentData(generateQuestion());
+        setCurrentData(createQuestionForLevel(currentLevel));
+        setQuestionStartedAt(Date.now());
       }, 200);
 
     } else {
       // Incorrect!
       setStreak(0); // Reset streak
       setWrongAnswer(selectedAnswer);
+      setWrongCount((previous) => previous + 1);
       playWrongSound();
     }
   };
@@ -178,6 +305,8 @@ export const MathGameScreen = () => {
    */
   const handleCountdownComplete = () => {
     setGamePhase('playing');
+    setSessionStartedAt(Date.now());
+    setQuestionStartedAt(Date.now());
 
     // Board squeeze animation (pop-in)
     boardScale.value = withSequence(
@@ -203,6 +332,10 @@ export const MathGameScreen = () => {
   const handleConfirmGiveUp = () => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     setShowGiveUpModal(false);
+    if (correctCount > 0 || wrongCount > 0 || roundScore > 0) {
+      finishRound('quit');
+      return;
+    }
     goBack();
   };
 
@@ -215,7 +348,15 @@ export const MathGameScreen = () => {
         resizeMode="cover"
       >
         <SafeAreaView style={styles.safeArea}>
-          <View style={styles.header}>
+          <View
+            style={[
+              styles.header,
+              {
+                paddingTop: headerTopPadding,
+                paddingHorizontal: headerSidePadding,
+              },
+            ]}
+          >
             <View style={styles.headerLeft}>
               <Pressable onPress={openGiveUpModal} >
                 <Animated.View style={[styles.pauseButton, pauseAnimatedStyle]}>
@@ -223,20 +364,34 @@ export const MathGameScreen = () => {
                 </Animated.View>
               </Pressable>
             </View>
-            <View style={styles.titleContainer}>
-              <Text style={styles.title}>Math Adventure</Text>
+            <View style={[styles.titleContainer, isCompact && styles.titleContainerCompact]}>
+              <Text style={[styles.title, { fontSize: titleFontSize }]}>Math Adventure</Text>
             </View>
             <View></View>
           </View>
-          <View style={styles.headerRight}>
-            <ScoreBadge />
+          <View style={[styles.headerRight, { width: headerRightWidth }]}>
+            <ScoreBadge game="math" />
           </View>
 
-          <View style={styles.content}>
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={[
+              styles.contentScroll,
+              isCompact && styles.contentScrollCompact,
+            ]}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+            scrollEnabled={isCompact}
+          >
             <CelebrationEffect trigger={celebrationTrigger} />
+            <View style={styles.roundMetaRow}>
+              <Text style={styles.roundMetaText}>
+                Level {currentLevel} · Question {Math.min(answeredCount + 1, roundQuestionCount)}/{roundQuestionCount}
+              </Text>
+            </View>
             {gamePhase !== 'playing' && (
               <GameCountdown
-                introText="Ready for Math?"
+                introText={`Ready for L${currentLevel}?`}
                 onComplete={handleCountdownComplete}
               />
             )}
@@ -244,38 +399,67 @@ export const MathGameScreen = () => {
             {gamePhase === 'playing' && (
               <>
                 <Animated.View style={[{ alignItems: 'center', width: '100%' }, contentAnimatedStyle]}>
-                  <Animated.View style={[styles.boardContainer, boardAnimatedStyle]}>
+                  <Animated.View
+                    style={[
+                      styles.boardContainer,
+                      { height: boardHeight, marginTop: isCompact ? verticalScale(12) : 20 },
+                      boardAnimatedStyle,
+                    ]}
+                  >
                     <ImageBackground
                       source={BOARD_IMAGE}
                       style={styles.boardImage}
                       resizeMode="contain"
                     >
                       <View style={styles.questionContainer}>
-                        <Text style={styles.questionText}>{currentData.question}</Text>
-                        <View style={styles.questionMarkBox}>
-                          <Text style={styles.questionMark}>?</Text>
+                        <Text style={[styles.questionText, { fontSize: questionFontSize }]}>
+                          {currentData.question}
+                        </Text>
+                        <View
+                          style={[
+                            styles.questionMarkBox,
+                            { width: questionMarkSize, height: questionMarkSize },
+                          ]}
+                        >
+                          <Text style={[styles.questionMark, { fontSize: questionFontSize }]}>?</Text>
                         </View>
                       </View>
                     </ImageBackground>
                   </Animated.View>
 
-                  <View style={styles.answersContainer}>
+                  <View
+                    style={[
+                      styles.answersContainer,
+                      {
+                        marginTop: answersTopMargin,
+                        width: answersContainerWidth,
+                      },
+                    ]}
+                  >
                     <View style={styles.answersRow}>
                       {currentData.choices.map((num) => (
                         <TactileButton
                           key={num}
                           onPress={() => handleAnswer(num)}
                           color={Colors.fun.pink}
-                          style={styles.answerButton}
+                          style={[
+                            styles.answerButton,
+                            {
+                              height: answerButtonHeight,
+                              borderRadius: isCompact ? scale(30) : 40,
+                            },
+                          ]}
                         >
                           {wrongAnswer === num ? (
                             <Image
                               source={WRONG_IMAGE}
-                              style={{ width: 60, height: 60 }}
+                              style={{ width: wrongIconSize, height: wrongIconSize }}
                               resizeMode="contain"
                             />
                           ) : (
-                            <Text style={styles.answerText}>{num}</Text>
+                            <Text style={[styles.answerText, { fontSize: answerTextSize }]}>
+                              {num}
+                            </Text>
                           )}
                         </TactileButton>
                       ))}
@@ -284,7 +468,7 @@ export const MathGameScreen = () => {
                 </Animated.View>
               </>
             )}
-          </View>
+          </ScrollView>
         </SafeAreaView>
       </ImageBackground>
       {showGiveUpModal && (
@@ -293,6 +477,28 @@ export const MathGameScreen = () => {
           onCancel={handleCancelGiveUp}
         />
       )}
+      <RoundResultPopup
+        visible={showRoundResult}
+        summary={roundSummary}
+        gameTitle="Math Adventure"
+        onPlayAgain={() => {
+          resetRound(currentLevel);
+        }}
+        onPlayNext={() => {
+          const nextLevel = roundSummary?.nextLevel ?? null;
+          if (nextLevel) {
+            setCurrentGameLevel('math', nextLevel);
+            resetRound(nextLevel);
+            return;
+          }
+          resetRound(currentLevel);
+        }}
+        onBackHome={goBack}
+        onTryRecovery={(suggestedLevel) => {
+          activateRecoveryMode('math', suggestedLevel);
+          resetRound(suggestedLevel);
+        }}
+      />
     </View>
   );
 };
@@ -342,6 +548,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary.main,
     marginRight: 20
   },
+  titleContainerCompact: {
+    paddingHorizontal: scale(14),
+    paddingVertical: verticalScale(7),
+    marginRight: scale(8),
+  },
   title: {
     fontFamily: 'SuperWonder',
     fontSize: 24,
@@ -350,9 +561,30 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    paddingTop: 0,
+  },
+  contentScroll: {
+    flexGrow: 1,
     justifyContent: 'flex-start',
     alignItems: 'center',
-    paddingTop: 0,
+    paddingBottom: verticalScale(24),
+  },
+  contentScrollCompact: {
+    paddingBottom: verticalScale(14),
+  },
+  roundMetaRow: {
+    marginTop: verticalScale(8),
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
+    borderRadius: scale(14),
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  roundMetaText: {
+    fontFamily: 'SuperWonder',
+    fontSize: scale(12),
+    color: Colors.secondary.dark,
   },
   // placeholderText + countdownText styles moved to shared GameCountdown component
   boardContainer: {

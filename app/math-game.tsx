@@ -1,4 +1,3 @@
-import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { MathGameScreen } from '@/features/math-game/screens/MathGameScreen';
 

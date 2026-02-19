@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, StatusBar, Platform } from 'react-native';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, StatusBar, Platform, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { useCloudTransition } from '@/hooks/useCloudTransition';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,35 +8,34 @@ import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/colors';
 import { TactileButton } from '@/components/TactileButton';
 import { GameCountdown } from '@/components/GameCountdown';
-
-const BACKGROUNDS = [
-  require('@/assets/images/alphabet/background.png'),
-  require('@/assets/images/alphabet/background2.png'),
-  require('@/assets/images/alphabet/background3.png'),
-];
-const PAUSE_ICON = require('@/assets/images/pause.png');
 import { GiveUpModal } from '@/components/GiveUpModal';
+import { RoundResultPopup } from '@/components/RoundResultPopup';
+import { ScoreBadge } from '@/components/ScoreBadge';
+import { useAppStore } from '@/store/useAppStore';
+import {
+  ALPHABET,
+  BACKGROUNDS,
+  CHILD_COLORS,
+  getLetterColor,
+  shuffleLetters,
+} from '@/features/alphabet-game/model/alphabet';
+import {
+  applyScoreFormula,
+  getComboBonus,
+  getSpeedBonus,
+  toAccuracy,
+} from '@/features/score/model/scoring';
+import { getAlphabetLevelConfig } from '@/features/progression/model/progression';
+import {
+  isSmallHeightDevice,
+  isVerySmallHeightDevice,
+  SCREEN_HEIGHT,
+  scale,
+  verticalScale,
+} from '@/utils/responsive';
+import type { RoundSummary } from '@/store/useAppStore';
 
-const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-
-const shuffleLetters = (letters: string[]) => {
-  const shuffled = [...letters];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-};
-
-// Helper to get consistent colors for letters
-const getLetterColor = (index: number) => {
-  const colors = [
-    Colors.candy.pink, Colors.candy.mint, Colors.candy.lemon,
-    Colors.candy.skyBlue, Colors.candy.lavender, Colors.candy.peach,
-    Colors.primary.main, Colors.accent.main, Colors.fun.purple
-  ];
-  return colors[index % colors.length];
-};
+const PAUSE_ICON = require('@/assets/images/pause.png');
 
 const AnimatedLetterButton = ({
   letter,
@@ -44,12 +43,14 @@ const AnimatedLetterButton = ({
   isCorrect,
   shakeTrigger,
   onPress,
+  compact,
 }: {
   letter: string;
   index: number;
   isCorrect: boolean;
   shakeTrigger: number;
   onPress: (letter: string) => void;
+  compact: boolean;
 }) => {
   const scale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -96,11 +97,15 @@ const AnimatedLetterButton = ({
         <Animated.View
           style={[
             styles.letterButton,
-            { backgroundColor: color, opacity: isCorrect ? 0 : 1 },
+            {
+              backgroundColor: color,
+              opacity: isCorrect ? 0 : 1,
+              borderRadius: compact ? 10 : 12,
+            },
             animatedStyle
           ]}
         >
-          <Text style={styles.letterText}>{letter}</Text>
+          <Text style={[styles.letterText, compact && styles.letterTextCompact]}>{letter}</Text>
           {/* Shine effect */}
           <View style={styles.shine} />
         </Animated.View>
@@ -112,27 +117,56 @@ const AnimatedLetterButton = ({
 export const AlphabetGameScreen = () => {
   const { replaceTo } = useCloudTransition();
   const insets = useSafeAreaInsets();
+  const difficulty = useAppStore((state) => state.settings.difficulty);
+  const addScore = useAppStore((state) => state.addScore);
+  const recordGameResult = useAppStore((state) => state.recordGameResult);
+  const currentLevel = useAppStore((state) => state.progression.games.alphabet.currentLevel);
+  const setCurrentGameLevel = useAppStore((state) => state.setCurrentGameLevel);
+  const activateRecoveryMode = useAppStore((state) => state.activateRecoveryMode);
+  const levelConfig = useMemo(() => getAlphabetLevelConfig(currentLevel), [currentLevel]);
+  const targetAlphabet = useMemo(
+    () => ALPHABET.slice(0, levelConfig.letterCount),
+    [levelConfig.letterCount]
+  );
   const [gamePhase, setGamePhase] = useState<'intro' | 'countdown' | 'playing'>('intro');
-  const [shuffledLetters, setShuffledLetters] = useState<string[]>(() => shuffleLetters(ALPHABET));
+  const [shuffledLetters, setShuffledLetters] = useState<string[]>(() =>
+    shuffleLetters(targetAlphabet)
+  );
   const [nextLetterIndex, setNextLetterIndex] = useState(0);
   const [correctLetters, setCorrectLetters] = useState<Set<string>>(() => new Set());
   const [shakeTickByLetter, setShakeTickByLetter] = useState<Record<string, number>>({});
+  const [roundScore, setRoundScore] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
   const [wrongCount, setWrongCount] = useState(0);
   const [roundStartedAt, setRoundStartedAt] = useState<number | null>(null);
+  const [letterStartedAt, setLetterStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [showGiveUpModal, setShowGiveUpModal] = useState(false);
+  const [roundSummary, setRoundSummary] = useState<RoundSummary | null>(null);
+  const [showRoundResult, setShowRoundResult] = useState(false);
+  const resultRecordedRef = useRef(false);
+  const isCompact = isSmallHeightDevice;
+  const isVeryCompact = isVerySmallHeightDevice;
+  const boardMaxHeight = isVeryCompact
+    ? SCREEN_HEIGHT * 0.44
+    : isCompact
+      ? SCREEN_HEIGHT * 0.50
+      : SCREEN_HEIGHT * 0.62;
+  const titleSize = isVeryCompact ? scale(18) : isCompact ? scale(20) : scale(22);
+  const timerSize = isVeryCompact ? scale(18) : isCompact ? scale(20) : scale(24);
+  const progressSize = isVeryCompact ? scale(24) : isCompact ? scale(28) : scale(34);
+  const progressSubSize = isVeryCompact ? scale(14) : isCompact ? scale(16) : scale(20);
+  const headerIconSize = isVeryCompact ? scale(42) : scale(50);
+  const footerBottom = Math.max(
+    isCompact ? verticalScale(16) : 40,
+    insets.bottom + (isCompact ? verticalScale(6) : 12)
+  );
 
   // Pick 3 unique random candy colors on mount for Timer / TapNext / Correct texts
-  const CHILD_COLORS = [
-    Colors.candy.pink, Colors.candy.bubblegum, Colors.candy.mint,
-    Colors.candy.lavender, Colors.candy.peach, Colors.candy.lemon,
-    Colors.candy.skyBlue, Colors.candy.lilac, Colors.candy.coral,
-    Colors.candy.seafoam, Colors.accent.main, Colors.fun.teal,
-  ];
   const [timerColor, tapNextColor, correctColor] = useMemo(() => {
     const shuffled = [...CHILD_COLORS].sort(() => Math.random() - 0.5);
     return [shuffled[0], shuffled[1], shuffled[2]];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Pick a random background image on each mount
@@ -149,8 +183,8 @@ export const AlphabetGameScreen = () => {
   const pauseAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pauseScale.value }],
   }));
-  const expectedLetter = ALPHABET[nextLetterIndex];
-  const isRoundComplete = nextLetterIndex >= ALPHABET.length;
+  const expectedLetter = targetAlphabet[nextLetterIndex];
+  const isRoundComplete = nextLetterIndex >= targetAlphabet.length;
   const formatElapsed = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
@@ -158,18 +192,51 @@ export const AlphabetGameScreen = () => {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
-  const startNewRound = () => {
-    setShuffledLetters(shuffleLetters(ALPHABET));
+  const startNewRound = (targetLevel?: number) => {
+    const level = targetLevel ?? currentLevel;
+    const lettersForLevel = ALPHABET.slice(0, getAlphabetLevelConfig(level).letterCount);
+    const now = Date.now();
+    setShuffledLetters(shuffleLetters(lettersForLevel));
     setNextLetterIndex(0);
     setCorrectLetters(new Set());
     setShakeTickByLetter({});
+    setRoundScore(0);
+    setStreak(0);
+    setBestStreak(0);
     setWrongCount(0);
-    setRoundStartedAt(Date.now());
+    setRoundStartedAt(now);
+    setLetterStartedAt(now);
     setElapsedMs(0);
+    setRoundSummary(null);
+    setShowRoundResult(false);
+    setGamePhase('intro');
+    resultRecordedRef.current = false;
     boardScale.value = withSequence(
       withTiming(0.9, { duration: 0 }),
       withSpring(1, { damping: 12, stiffness: 100 })
     );
+  };
+
+  const recordAlphabetResult = (
+    score: number,
+    timeMs: number | null,
+    correct: number,
+    wrong: number,
+    peakStreak: number,
+    outcome: 'won' | 'lost' | 'quit'
+  ): RoundSummary | null => {
+    if (resultRecordedRef.current) return null;
+    resultRecordedRef.current = true;
+    return recordGameResult({
+      game: 'alphabet',
+      score,
+      timeMs,
+      accuracy: toAccuracy(correct, wrong),
+      streak: peakStreak,
+      level: currentLevel,
+      hintsUsed: wrong > 0,
+      outcome,
+    });
   };
 
   const handleLetterPress = (letter: string) => {
@@ -179,25 +246,68 @@ export const AlphabetGameScreen = () => {
 
     if (letter === expectedLetter) {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const responseMs = letterStartedAt ? Date.now() - letterStartedAt : Number.POSITIVE_INFINITY;
       setCorrectLetters((prev) => {
         const next = new Set(prev);
         next.add(letter);
         return next;
       });
 
+      const newStreak = streak + 1;
+      const nextBestStreak = Math.max(bestStreak, newStreak);
+      const earnedPoints = applyScoreFormula({
+        basePoints: 8,
+        speedBonus: getSpeedBonus(responseMs, {
+          fastMs: 1500,
+          mediumMs: 3200,
+          fastBonus: 4,
+          mediumBonus: 2,
+          slowBonus: 0,
+        }),
+        comboBonus: getComboBonus(newStreak, {
+          startAt: 4,
+          maxBonus: 8,
+        }),
+        difficulty,
+      });
+      const nextRoundScore = roundScore + earnedPoints;
+
+      setStreak(newStreak);
+      setBestStreak(nextBestStreak);
+      setRoundScore(nextRoundScore);
+      addScore('alphabet', earnedPoints);
+
       const updatedIndex = nextLetterIndex + 1;
       setNextLetterIndex(updatedIndex);
 
-      if (updatedIndex === ALPHABET.length) {
-        if (roundStartedAt) {
-          setElapsedMs(Date.now() - roundStartedAt);
+      if (updatedIndex === targetAlphabet.length) {
+        const completedAt = Date.now();
+        const totalMs = roundStartedAt ? completedAt - roundStartedAt : null;
+        if (totalMs !== null) {
+          setElapsedMs(totalMs);
+        }
+        setLetterStartedAt(null);
+        const summary = recordAlphabetResult(
+          nextRoundScore,
+          totalMs,
+          updatedIndex,
+          wrongCount,
+          nextBestStreak,
+          'won'
+        );
+        if (summary) {
+          setRoundSummary(summary);
+          setShowRoundResult(true);
         }
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        setLetterStartedAt(Date.now());
       }
       return;
     }
 
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    setStreak(0);
     setWrongCount((prev) => prev + 1);
     setShakeTickByLetter((prev) => ({
       ...prev,
@@ -218,6 +328,23 @@ export const AlphabetGameScreen = () => {
   const handleConfirmGiveUp = () => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     setShowGiveUpModal(false);
+    const hasProgress = nextLetterIndex > 0 || wrongCount > 0 || roundScore > 0;
+    if (hasProgress) {
+      const totalMs = roundStartedAt ? Date.now() - roundStartedAt : null;
+      const summary = recordAlphabetResult(
+        roundScore,
+        totalMs,
+        nextLetterIndex,
+        wrongCount,
+        bestStreak,
+        'quit'
+      );
+      if (summary) {
+        setRoundSummary(summary);
+        setShowRoundResult(true);
+      }
+      return;
+    }
     replaceTo('/');
   };
 
@@ -226,9 +353,12 @@ export const AlphabetGameScreen = () => {
    * Starts the playing phase, timer, and board pop-in animation.
    */
   const handleCountdownComplete = () => {
+    const now = Date.now();
     setGamePhase('playing');
-    setRoundStartedAt(Date.now());
+    setRoundStartedAt(now);
+    setLetterStartedAt(now);
     setElapsedMs(0);
+    resultRecordedRef.current = false;
 
     // Board squeeze animation (pop-in)
     boardScale.value = withSequence(
@@ -261,6 +391,11 @@ export const AlphabetGameScreen = () => {
     return () => clearInterval(timer);
   }, [gamePhase, isRoundComplete, roundStartedAt]);
 
+  useEffect(() => {
+    startNewRound(currentLevel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLevel]);
+
 
 
   return (
@@ -279,41 +414,82 @@ export const AlphabetGameScreen = () => {
         <View style={styles.header}>
           {/* Top-left pause button */}
           <Pressable onPress={openGiveUpModal} >
-            <Animated.View style={[styles.pauseButton, pauseAnimatedStyle]}>
-              <Image source={PAUSE_ICON} style={styles.pauseIcon} contentFit="contain" />
+            <Animated.View
+              style={[
+                styles.pauseButton,
+                {
+                  width: headerIconSize,
+                  height: headerIconSize,
+                },
+                pauseAnimatedStyle,
+              ]}
+            >
+              <Image
+                source={PAUSE_ICON}
+                style={{ width: headerIconSize, height: headerIconSize }}
+                contentFit="contain"
+              />
             </Animated.View>
           </Pressable>
 
           <View style={styles.titleContainer}>
-            <Text style={styles.title}>Alphabet Fun</Text>
+            <Text style={[styles.title, { fontSize: titleSize }]}>Alphabet Fun</Text>
           </View>
-          <View></View>
+          <View style={[styles.headerSpacer, { width: headerIconSize, height: headerIconSize }]} />
+        </View>
+        <View style={styles.scoreRow}>
+          <ScoreBadge game="alphabet" />
         </View>
         {gamePhase === 'playing' && (
-          <Text style={[styles.timerText, { color: timerColor }]}>Time: {formatElapsed(elapsedMs)}</Text>
+          <Text style={[styles.timerText, { color: timerColor, fontSize: timerSize }]}>
+            Time: {formatElapsed(elapsedMs)}
+          </Text>
         )}
         {/* Content Area */}
-        <View style={styles.content}>
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={[
+            styles.contentScroll,
+            isCompact && styles.contentScrollCompact,
+          ]}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+          scrollEnabled={isCompact}
+        >
 
           {gamePhase !== 'playing' && (
             <GameCountdown
-              introText="Ready for ABCs?"
+              introText={`Ready for ABC L${currentLevel}?`}
               onComplete={handleCountdownComplete}
             />
           )}
 
           {gamePhase === 'playing' && (
             <>
-              <View style={styles.progressContainer}>
-                <Text style={[styles.progressText, { color: tapNextColor }]}>
+              <View
+                style={[
+                  styles.progressContainer,
+                  isCompact && styles.progressContainerCompact,
+                ]}
+              >
+                <Text style={[styles.progressText, { color: tapNextColor, fontSize: progressSize }]}>
                   {isRoundComplete ? 'Awesome! You finished A to Z!' : `Tap Next: ${expectedLetter}`}
                 </Text>
-                <Text style={[styles.progressSubText, { color: correctColor }]}>
-                  Correct: {nextLetterIndex}/26 • Mistakes: {wrongCount}
+                <Text style={[styles.progressSubText, { color: correctColor, fontSize: progressSubSize }]}>
+                  Level {currentLevel} • Correct: {nextLetterIndex}/{targetAlphabet.length} • Mistakes: {wrongCount} • Streak: {streak} • Score: {roundScore}
                 </Text>
               </View>
 
-              <Animated.View style={[styles.boardContainer, boardAnimatedStyle]}>
+              <Animated.View
+                style={[
+                  styles.boardContainer,
+                  {
+                    maxHeight: boardMaxHeight,
+                    width: isCompact ? '96%' : '92%',
+                  },
+                  boardAnimatedStyle,
+                ]}
+              >
                 {/* <Image
                   source={BOARD_IMAGE}
                   style={styles.boardImage}
@@ -331,6 +507,7 @@ export const AlphabetGameScreen = () => {
                         isCorrect={correctLetters.has(letter)}
                         shakeTrigger={shakeTickByLetter[letter] ?? 0}
                         onPress={handleLetterPress}
+                        compact={isCompact}
                       />
                     ))}
                   </View>
@@ -338,7 +515,7 @@ export const AlphabetGameScreen = () => {
               </Animated.View>
 
               {/* Extra bottom padding accounts for Android software nav buttons */}
-              <View style={[styles.footer, { bottom: Math.max(40, insets.bottom + 12) }]}>
+              <View style={[styles.footer, { bottom: footerBottom }]}>
                 {isRoundComplete && (
                   <TactileButton
                     onPress={startNewRound}
@@ -359,7 +536,7 @@ export const AlphabetGameScreen = () => {
             </>
           )}
 
-        </View>
+        </ScrollView>
       </SafeAreaView>
 
       {showGiveUpModal && (
@@ -368,6 +545,26 @@ export const AlphabetGameScreen = () => {
           onCancel={handleCancelGiveUp}
         />
       )}
+      <RoundResultPopup
+        visible={showRoundResult}
+        summary={roundSummary}
+        gameTitle="Alphabet Fun"
+        onPlayAgain={() => startNewRound(currentLevel)}
+        onPlayNext={() => {
+          const nextLevel = roundSummary?.nextLevel ?? null;
+          if (nextLevel) {
+            setCurrentGameLevel('alphabet', nextLevel);
+            startNewRound(nextLevel);
+            return;
+          }
+          startNewRound(currentLevel);
+        }}
+        onBackHome={() => replaceTo('/')}
+        onTryRecovery={(suggestedLevel) => {
+          activateRecoveryMode('alphabet', suggestedLevel);
+          startNewRound(suggestedLevel);
+        }}
+      />
     </View>
   );
 };
@@ -390,6 +587,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     zIndex: 1,
+  },
+  headerSpacer: {
+    width: 50,
+    height: 50,
+  },
+  scoreRow: {
+    width: '100%',
+    alignItems: 'flex-end',
+    paddingHorizontal: 16,
+    marginTop: 8,
   },
   pauseButton: {
     justifyContent: 'center',
@@ -429,10 +636,15 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    justifyContent: "flex-start",
-    alignItems: "center",
-    // paddingVertical: 20,
     width: '100%',
+  },
+  contentScroll: {
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingBottom: verticalScale(20),
+  },
+  contentScrollCompact: {
+    paddingBottom: verticalScale(10),
   },
   boardContainer: {
     width: '92%',
@@ -493,6 +705,9 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 1,
   },
+  letterTextCompact: {
+    fontSize: scale(22),
+  },
   shine: {
     position: 'absolute',
     top: 3,
@@ -515,6 +730,11 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     alignItems: 'center',
     paddingHorizontal: 24,
+  },
+  progressContainerCompact: {
+    marginTop: verticalScale(16),
+    marginBottom: verticalScale(8),
+    paddingHorizontal: scale(14),
   },
   progressText: {
     fontFamily: 'SuperWonder',

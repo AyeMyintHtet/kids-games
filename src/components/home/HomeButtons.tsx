@@ -23,6 +23,53 @@ export const SettingsButton: React.FC<{ onPress: () => void }> = ({ onPress }) =
   );
 };
 
+export const AchievementsButton: React.FC<{
+  onPress: () => void;
+  unlockedCount: number;
+  totalCount: number;
+}> = ({ onPress, unlockedCount, totalCount }) => {
+  return (
+    <View style={styles.achievementButtonWrap}>
+      <TactileButton
+        onPress={onPress}
+        color={Colors.accent.main}
+        shadowColor={Colors.accent.dark}
+        size="small"
+        style={styles.cornerButton}
+      >
+        <Text style={styles.cornerButtonEmoji}>🏅</Text>
+      </TactileButton>
+      <View style={styles.countBubble}>
+        <Text style={styles.countText}>
+          {unlockedCount}/{totalCount}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+export const JourneyButton: React.FC<{
+  onPress: () => void;
+  totalStars: number;
+}> = ({ onPress, totalStars }) => {
+  return (
+    <View style={styles.achievementButtonWrap}>
+      <TactileButton
+        onPress={onPress}
+        color={Colors.secondary.main}
+        shadowColor={Colors.secondary.dark}
+        size="small"
+        style={styles.cornerButton}
+      >
+        <Text style={styles.cornerButtonEmoji}>🗺️</Text>
+      </TactileButton>
+      <View style={[styles.countBubble, styles.starBubble]}>
+        <Text style={styles.countText}>⭐{totalStars}</Text>
+      </View>
+    </View>
+  );
+};
+
 export const SoundButton: React.FC<{ onPress: () => void; isMuted: boolean }> = ({
   onPress,
   isMuted,
@@ -73,8 +120,36 @@ const styles = StyleSheet.create({
   parentGateContainer: {
     alignItems: 'center',
   },
+  achievementButtonWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   cornerButtonEmoji: {
     fontSize: scale(28),
+  },
+  countBubble: {
+    position: 'absolute',
+    right: -scale(8),
+    top: -scale(4),
+    minWidth: scale(34),
+    paddingHorizontal: scale(5),
+    height: scale(20),
+    borderRadius: scale(10),
+    backgroundColor: Colors.fun.pink,
+    borderWidth: 2,
+    borderColor: Colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countText: {
+    fontFamily: 'SuperWonder',
+    fontSize: scale(9),
+    color: Colors.white,
+  },
+  starBubble: {
+    backgroundColor: Colors.secondary.dark,
+    minWidth: scale(38),
   },
   parentGateLabel: {
     fontFamily: 'SuperWonder',

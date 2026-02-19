@@ -34,7 +34,7 @@ export const AnimatedSun: React.FC = () => {
       -1,
       true
     );
-  }, []);
+  }, [sunRotate, sunScale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [

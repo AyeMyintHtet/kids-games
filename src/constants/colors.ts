@@ -121,6 +121,14 @@ export const Colors = {
   backgroundGradientBottom: '#4CAF50', // Grass green
   cream: '#FFF9E6',
   white: '#FFFFFF',
+
+  // Shared gradients for screen themes
+  gradients: {
+    homeSky: ['#87CEEB', '#B0E0E6', '#98D8C8'] as const,
+    homeGrass: ['#7CB342', '#558B2F', '#33691E'] as const,
+    animalOcean: ['#83D9FF', '#4EBEFF', '#2D86E0'] as const,
+    modalPastel: ['#FFFDF0', '#FFEFF8', '#EAF6FF'] as const,
+  },
 } as const;
 
 export type ColorScheme = typeof Colors;

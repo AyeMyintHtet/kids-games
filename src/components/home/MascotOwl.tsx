@@ -26,7 +26,7 @@ export const MascotOwl: React.FC = () => {
       -1,
       true
     );
-  }, []);
+  }, [bounce]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: bounce.value }],

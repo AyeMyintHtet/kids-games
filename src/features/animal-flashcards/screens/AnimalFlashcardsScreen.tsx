@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -24,160 +25,39 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useCloudTransition } from '@/hooks/useCloudTransition';
 import { Colors } from '@/constants/colors';
+import { Typography } from '@/constants/typography';
 import { ScoreBadge } from '@/components/ScoreBadge';
 import { GameCountdown } from '@/components/GameCountdown';
 import { CelebrationEffect } from '@/components/CelebrationEffect';
-import { useAppStore } from '@/store/useAppStore';
-import { SCREEN_WIDTH, scale, verticalScale } from '@/utils/responsive';
+import { RoundResultPopup } from '@/components/RoundResultPopup';
+import { useAppStore, type RoundSummary } from '@/store/useAppStore';
+import {
+  isSmallHeightDevice,
+  isVerySmallHeightDevice,
+  SCREEN_HEIGHT,
+  SCREEN_WIDTH,
+  scale,
+  verticalScale,
+} from '@/utils/responsive';
+import {
+  buildDeck,
+  type AnimalCard,
+  type GamePhase,
+  type Level,
+  type RoundResult,
+} from '@/features/animal-flashcards/model/memory';
+import {
+  applyScoreFormula,
+  getComboBonus,
+  getSpeedBonus,
+  toAccuracy,
+} from '@/features/score/model/scoring';
+import { getAnimalLevelConfig } from '@/features/progression/model/progression';
 
 const CORRECT_SOUND = require('@/assets/sounds/correct.mp3');
 const WRONG_SOUND = require('@/assets/sounds/wrong.mp3');
 const WIN_SOUND = require('@/assets/sounds/bravo.mp3');
 const LOSS_SOUND = require('@/assets/sounds/wrong.mp3');
-const COW_IMAGE = require('@/assets/images/animal-flashcard/image.png');
-const DOG_IMAGE = require('@/assets/images/animal-flashcard/image copy.png');
-const PIG_IMAGE = require('@/assets/images/animal-flashcard/image copy 2.png');
-const SHEEP_IMAGE = require('@/assets/images/animal-flashcard/image copy 3.png');
-const CAT_IMAGE = require('@/assets/images/animal-flashcard/image copy 4.png');
-const HORSE_IMAGE = require('@/assets/images/animal-flashcard/image copy 5.png');
-const DUCK_IMAGE = require('@/assets/images/animal-flashcard/image copy 6.png');
-const DONKEY_IMAGE = require('@/assets/images/animal-flashcard/image copy 7.png');
-const CHICKEN_IMAGE = require('@/assets/images/animal-flashcard/image copy 8.png');
-const RABBIT_IMAGE = require('@/assets/images/animal-flashcard/image copy 9.png');
-const LLAMA_IMAGE = require('@/assets/images/animal-flashcard/image copy 10.png');
-const YAK_IMAGE = require('@/assets/images/animal-flashcard/image copy 11.png');
-const CAMEL_IMAGE = require('@/assets/images/animal-flashcard/image copy 12.png');
-const OX_IMAGE = require('@/assets/images/animal-flashcard/image copy 13.png');
-const TURKEY_IMAGE = require('@/assets/images/animal-flashcard/image copy 14.png');
-
-type GamePhase = 'intro' | 'playing';
-type RoundResult = 'none' | 'won' | 'lost';
-type Level = 'easy' | 'medium' | 'hard';
-
-type LevelConfig = {
-  label: string;
-  pairs: number;
-  columns: number;
-  lives: number;
-  durationSeconds: number;
-  pairPoints: number;
-  streakBonus: number;
-  completionBonus: number;
-};
-
-const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
-  easy: {
-    label: 'Easy',
-    pairs: 4,
-    columns: 3,
-    lives: 6,
-    durationSeconds: 90,
-    pairPoints: 15,
-    streakBonus: 3,
-    completionBonus: 40,
-  },
-  medium: {
-    label: 'Medium',
-    pairs: 6,
-    columns: 4,
-    lives: 7,
-    durationSeconds: 75,
-    pairPoints: 20,
-    streakBonus: 5,
-    completionBonus: 60,
-  },
-  hard: {
-    label: 'Hard',
-    pairs: 8,
-    columns: 4,
-    lives: 8,
-    durationSeconds: 60,
-    pairPoints: 25,
-    streakBonus: 8,
-    completionBonus: 90,
-  },
-};
-
-const LEVEL_ANIMAL_IDS: Record<Level, string[]> = {
-  easy: ['pig', 'dog', 'horse', 'yak'],
-  medium: ['pig', 'dog', 'horse', 'yak', 'cat', 'sheep'],
-  hard: ['pig', 'dog', 'horse', 'yak', 'cat', 'sheep', 'cow', 'rabbit'],
-};
-
-type Animal = {
-  id: string;
-  name: string;
-  emoji: string;
-  cardColor: string;
-  imageSource?: number | string;
-};
-
-type AnimalCard = Animal & {
-  uid: string;
-  isFlipped: boolean;
-  isMatched: boolean;
-  shakeTick: number;
-};
-
-const ANIMALS: Animal[] = [
-  { id: 'pig', name: 'Pig', emoji: '🐷', cardColor: '#FFD1DC', imageSource: PIG_IMAGE },
-  { id: 'dog', name: 'Dog', emoji: '🐶', cardColor: '#DBEAFE', imageSource: DOG_IMAGE },
-  { id: 'horse', name: 'Horse', emoji: '🐴', cardColor: '#FDE4CF', imageSource: HORSE_IMAGE },
-  { id: 'yak', name: 'Yak', emoji: '🐂', cardColor: '#FAE0C8', imageSource: YAK_IMAGE },
-  { id: 'cat', name: 'Cat', emoji: '🐱', cardColor: '#FFF1B7', imageSource: CAT_IMAGE },
-  { id: 'sheep', name: 'Sheep', emoji: '🐑', cardColor: '#E7F9EF', imageSource: SHEEP_IMAGE },
-  { id: 'cow', name: 'Cow', emoji: '🐮', cardColor: '#E9E7FF', imageSource: COW_IMAGE },
-  { id: 'rabbit', name: 'Rabbit', emoji: '🐰', cardColor: '#FFE2EE', imageSource: RABBIT_IMAGE },
-  { id: 'duck', name: 'Duck', emoji: '🦆', cardColor: '#E6F7FF', imageSource: DUCK_IMAGE },
-  { id: 'donkey', name: 'Donkey', emoji: '🫏', cardColor: '#DFE9F7', imageSource: DONKEY_IMAGE },
-  { id: 'chicken', name: 'Chicken', emoji: '🐔', cardColor: '#FBE7C7', imageSource: CHICKEN_IMAGE },
-  { id: 'llama', name: 'Llama', emoji: '🦙', cardColor: '#FEE2C6', imageSource: LLAMA_IMAGE },
-  { id: 'camel', name: 'Camel', emoji: '🐫', cardColor: '#F6DDB7', imageSource: CAMEL_IMAGE },
-  { id: 'ox', name: 'Ox', emoji: '🐂', cardColor: '#E5D0D0', imageSource: OX_IMAGE },
-  { id: 'turkey', name: 'Turkey', emoji: '🦃', cardColor: '#F5D5D5', imageSource: TURKEY_IMAGE },
-];
-
-const shuffle = <T,>(items: T[]) => {
-  const cloned = [...items];
-  for (let i = cloned.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [cloned[i], cloned[j]] = [cloned[j], cloned[i]];
-  }
-  return cloned;
-};
-
-const buildDeck = (level: Level, pairCount: number) => {
-  const configuredIds = LEVEL_ANIMAL_IDS[level];
-  const selectedFromConfig = configuredIds
-    .map((id) => ANIMALS.find((animal) => animal.id === id))
-    .filter(Boolean) as Animal[];
-
-  let selectedAnimals = selectedFromConfig.slice(0, pairCount);
-  if (selectedAnimals.length < pairCount) {
-    const existingIds = new Set(selectedAnimals.map((animal) => animal.id));
-    const extras = shuffle(ANIMALS.filter((animal) => !existingIds.has(animal.id)))
-      .slice(0, pairCount - selectedAnimals.length);
-    selectedAnimals = [...selectedAnimals, ...extras];
-  }
-  const duplicated = selectedAnimals.flatMap((animal) => [
-    {
-      ...animal,
-      uid: `${animal.id}-A`,
-      isFlipped: false,
-      isMatched: false,
-      shakeTick: 0,
-    },
-    {
-      ...animal,
-      uid: `${animal.id}-B`,
-      isFlipped: false,
-      isMatched: false,
-      shakeTick: 0,
-    },
-  ]);
-
-  return shuffle(duplicated);
-};
 
 type AquariumBubbleProps = {
   left: number;
@@ -319,29 +199,50 @@ const MemoryCard = ({ card, disabled, onPress, cardWidth, cardHeight }: MemoryCa
 
 export const AnimalFlashcardsScreen = () => {
   const { goBack } = useCloudTransition();
-  const { incrementScore, recordGamePlayed } = useAppStore();
-  const [level, setLevel] = useState<Level>('easy');
-  const activeLevel = LEVEL_CONFIGS[level];
+  const addScore = useAppStore((state) => state.addScore);
+  const recordGameResult = useAppStore((state) => state.recordGameResult);
+  const currentLevel = useAppStore((state) => state.progression.games.animals.currentLevel);
+  const unlockedLevel = useAppStore((state) => state.progression.games.animals.unlockedLevel);
+  const totalAnimalStars = useAppStore((state) => state.progression.games.animals.totalStars);
+  const setCurrentGameLevel = useAppStore((state) => state.setCurrentGameLevel);
+  const activateRecoveryMode = useAppStore((state) => state.activateRecoveryMode);
+  const activeLevel = useMemo(() => getAnimalLevelConfig(currentLevel), [currentLevel]);
+  const difficultyBand = activeLevel.band as Level;
+  const isCompact = isSmallHeightDevice;
+  const isVeryCompact = isVerySmallHeightDevice;
+  const boardHeight = isVeryCompact
+    ? SCREEN_HEIGHT * 0.36
+    : isCompact
+      ? SCREEN_HEIGHT * 0.43
+      : verticalScale(410);
   const [phase, setPhase] = useState<GamePhase>('intro');
-  const [cards, setCards] = useState<AnimalCard[]>(() => buildDeck('easy', LEVEL_CONFIGS.easy.pairs));
+  const [cards, setCards] = useState<AnimalCard[]>(() =>
+    buildDeck(difficultyBand, activeLevel.pairs)
+  );
   const [openedCardIds, setOpenedCardIds] = useState<string[]>([]);
   const [isResolvingPair, setIsResolvingPair] = useState(false);
   const [moves, setMoves] = useState(0);
-  const [lives, setLives] = useState(LEVEL_CONFIGS.easy.lives);
+  const [lives, setLives] = useState(activeLevel.lives);
   const [streak, setStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
   const [roundScore, setRoundScore] = useState(0);
-  const [remainingTime, setRemainingTime] = useState(LEVEL_CONFIGS.easy.durationSeconds);
+  const [remainingTime, setRemainingTime] = useState(activeLevel.durationSeconds);
+  const [roundStartedAt, setRoundStartedAt] = useState<number | null>(null);
+  const [firstCardOpenedAt, setFirstCardOpenedAt] = useState<number | null>(null);
   const [result, setResult] = useState<RoundResult>('none');
   const [feedbackLabel, setFeedbackLabel] = useState('Find the same animals!');
   const [celebrationTrigger, setCelebrationTrigger] = useState(0);
+  const [roundSummary, setRoundSummary] = useState<RoundSummary | null>(null);
+  const [showRoundResult, setShowRoundResult] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
-  const resultAnimatedScale = useSharedValue(0.7);
-  const resultEmojiFloat = useSharedValue(0);
   const wrongFlashOpacity = useSharedValue(0);
   const winBonusAwardedRef = useRef(false);
+  const resultRecordedRef = useRef(false);
+  const roundScoreRef = useRef(0);
+  const bestStreakRef = useRef(0);
   const [boardLayout, setBoardLayout] = useState({
     width: SCREEN_WIDTH - scale(20),
-    height: verticalScale(410),
+    height: boardHeight,
   });
 
   const matchedPairs = useMemo(() => cards.filter((card) => card.isMatched).length / 2, [cards]);
@@ -397,6 +298,18 @@ export const AnimalFlashcardsScreen = () => {
     ],
     []
   );
+  const activeBubbles = isVeryCompact ? bubbleConfig.slice(0, 3) : bubbleConfig;
+
+  const addRoundScore = useCallback(
+    (points: number) => {
+      const safePoints = Math.max(0, Math.round(points));
+      if (safePoints <= 0) return;
+      roundScoreRef.current += safePoints;
+      setRoundScore(roundScoreRef.current);
+      addScore('animals', safePoints);
+    },
+    [addScore]
+  );
 
   const cleanupSound = useCallback(async () => {
     if (!soundRef.current) return;
@@ -429,24 +342,6 @@ export const AnimalFlashcardsScreen = () => {
   }, [cleanupSound]);
 
   useEffect(() => {
-    if (result === 'none') return;
-
-    resultAnimatedScale.value = withSequence(
-      withTiming(1.07, { duration: 220, easing: Easing.out(Easing.cubic) }),
-      withSpring(1, { damping: 12, stiffness: 160 })
-    );
-
-    resultEmojiFloat.value = withRepeat(
-      withSequence(
-        withTiming(-10, { duration: 700, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration: 700, easing: Easing.inOut(Easing.sin) })
-      ),
-      -1,
-      true
-    );
-  }, [result, resultAnimatedScale, resultEmojiFloat]);
-
-  useEffect(() => {
     if (phase !== 'playing' || result !== 'none') return;
     if (remainingTime <= 0) return;
 
@@ -468,13 +363,45 @@ export const AnimalFlashcardsScreen = () => {
       void playSound(WIN_SOUND);
 
       if (!winBonusAwardedRef.current) {
-        const completionBonus = activeLevel.completionBonus;
-        setRoundScore((previous) => previous + completionBonus);
-        incrementScore(completionBonus);
+        const elapsedRoundMs = Math.max(0, (activeLevel.durationSeconds - remainingTime) * 1000);
+        const completionSpeedBonus = getSpeedBonus(
+          elapsedRoundMs,
+          {
+            fastMs: Math.floor(activeLevel.durationSeconds * 400),
+            mediumMs: Math.floor(activeLevel.durationSeconds * 750),
+            fastBonus: 10,
+            mediumBonus: 5,
+            slowBonus: 0,
+          }
+        );
+        const completionBonus = applyScoreFormula({
+          basePoints: activeLevel.completionBonus,
+          speedBonus: completionSpeedBonus,
+          comboBonus: getComboBonus(bestStreakRef.current, {
+            startAt: 3,
+            maxBonus: 6,
+          }),
+          difficulty: difficultyBand,
+        });
+        addRoundScore(completionBonus);
         winBonusAwardedRef.current = true;
       }
 
-      recordGamePlayed();
+      if (!resultRecordedRef.current) {
+        resultRecordedRef.current = true;
+        const summary = recordGameResult({
+          game: 'animals',
+          score: roundScoreRef.current,
+          timeMs: roundStartedAt ? Date.now() - roundStartedAt : null,
+          accuracy: toAccuracy(matchedPairs, Math.max(0, moves - matchedPairs)),
+          streak: bestStreakRef.current,
+          level: currentLevel,
+          hintsUsed: moves > matchedPairs,
+          outcome: 'won',
+        });
+        setRoundSummary(summary);
+        setShowRoundResult(true);
+      }
       return;
     }
 
@@ -483,67 +410,85 @@ export const AnimalFlashcardsScreen = () => {
       setFeedbackLabel(remainingTime === 0 ? "Time's up! Try again!" : 'Try again. You can do it!');
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       void playSound(LOSS_SOUND);
-      recordGamePlayed();
+      if (!resultRecordedRef.current) {
+        resultRecordedRef.current = true;
+        const summary = recordGameResult({
+          game: 'animals',
+          score: roundScoreRef.current,
+          timeMs: roundStartedAt ? Date.now() - roundStartedAt : null,
+          accuracy: toAccuracy(matchedPairs, Math.max(0, moves - matchedPairs)),
+          streak: bestStreakRef.current,
+          level: currentLevel,
+          hintsUsed: true,
+          outcome: 'lost',
+        });
+        setRoundSummary(summary);
+        setShowRoundResult(true);
+      }
     }
   }, [
+    addRoundScore,
     activeLevel.completionBonus,
+    activeLevel.durationSeconds,
+    currentLevel,
+    difficultyBand,
     phase,
     result,
     matchedPairs,
     totalPairs,
     lives,
+    moves,
     remainingTime,
-    incrementScore,
     playSound,
-    recordGamePlayed,
+    recordGameResult,
+    roundStartedAt,
   ]);
-
-  const resultCardAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: resultAnimatedScale.value }],
-  }));
-
-  const resultEmojiAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: resultEmojiFloat.value }],
-  }));
 
   const wrongFlashAnimatedStyle = useAnimatedStyle(() => ({
     opacity: wrongFlashOpacity.value,
   }));
 
   const handleCountdownComplete = useCallback(() => {
+    setRoundStartedAt(Date.now());
+    setFirstCardOpenedAt(null);
+    resultRecordedRef.current = false;
     setPhase('playing');
   }, []);
 
-  const startNewGame = useCallback((nextLevel?: Level) => {
-    const selectedLevel = nextLevel ?? level;
-    const config = LEVEL_CONFIGS[selectedLevel];
+  const startNewGame = useCallback((nextProgressLevel?: number) => {
+    const selectedProgressLevel = nextProgressLevel ?? currentLevel;
+    const config = getAnimalLevelConfig(selectedProgressLevel);
+    const nextDifficultyBand = config.band as Level;
 
-    if (nextLevel && nextLevel !== level) {
-      setLevel(nextLevel);
+    if (nextProgressLevel && nextProgressLevel !== currentLevel) {
+      setCurrentGameLevel('animals', nextProgressLevel);
     }
 
-    setCards(buildDeck(selectedLevel, config.pairs));
+    setCards(buildDeck(nextDifficultyBand, config.pairs));
     setOpenedCardIds([]);
     setIsResolvingPair(false);
     setMoves(0);
     setLives(config.lives);
     setStreak(0);
+    setBestStreak(0);
     setRoundScore(0);
     setRemainingTime(config.durationSeconds);
+    setRoundStartedAt(null);
+    setFirstCardOpenedAt(null);
     setResult('none');
-    setFeedbackLabel(`Find the same animals! (${config.label})`);
+    setRoundSummary(null);
+    setShowRoundResult(false);
+    setFeedbackLabel(`Find the same animals! (L${selectedProgressLevel})`);
     setPhase('intro');
+    roundScoreRef.current = 0;
+    bestStreakRef.current = 0;
     winBonusAwardedRef.current = false;
-  }, [level]);
+    resultRecordedRef.current = false;
+  }, [currentLevel, setCurrentGameLevel]);
 
-  const handleLevelSelect = useCallback(
-    (nextLevel: Level) => {
-      if (nextLevel === level) return;
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      startNewGame(nextLevel);
-    },
-    [level, startNewGame]
-  );
+  useEffect(() => {
+    startNewGame(currentLevel);
+  }, [currentLevel, startNewGame]);
 
   const handleCardPress = useCallback(
     (selectedCard: AnimalCard) => {
@@ -570,12 +515,17 @@ export const AnimalFlashcardsScreen = () => {
 
       if (nextOpenIds.length < 2) {
         setOpenedCardIds(nextOpenIds);
+        setFirstCardOpenedAt(Date.now());
         return;
       }
 
       setOpenedCardIds(nextOpenIds);
       setIsResolvingPair(true);
       setMoves((previous) => previous + 1);
+      const pairResponseMs = firstCardOpenedAt
+        ? Date.now() - firstCardOpenedAt
+        : Number.POSITIVE_INFINITY;
+      setFirstCardOpenedAt(null);
 
       const firstSelected = cards.find((card) => card.uid === nextOpenIds[0]);
       const secondSelected = cards.find((card) => card.uid === nextOpenIds[1]);
@@ -590,12 +540,26 @@ export const AnimalFlashcardsScreen = () => {
 
       if (isMatch) {
         const updatedStreak = streak + 1;
-        const earnedPoints =
-          activeLevel.pairPoints + (updatedStreak >= 2 ? activeLevel.streakBonus : 0);
+        bestStreakRef.current = Math.max(bestStreakRef.current, updatedStreak);
+        const earnedPoints = applyScoreFormula({
+          basePoints: activeLevel.pairPoints,
+          speedBonus: getSpeedBonus(pairResponseMs, {
+            fastMs: 1600,
+            mediumMs: 3000,
+            fastBonus: 4,
+            mediumBonus: 2,
+            slowBonus: 0,
+          }),
+          comboBonus: getComboBonus(updatedStreak, {
+            startAt: 2,
+            maxBonus: activeLevel.streakBonus,
+          }),
+          difficulty: difficultyBand,
+        });
 
         setStreak(updatedStreak);
-        setRoundScore((previous) => previous + earnedPoints);
-        incrementScore(earnedPoints);
+        setBestStreak(bestStreakRef.current);
+        addRoundScore(earnedPoints);
         setFeedbackLabel('Great match!');
         setCelebrationTrigger((previous) => previous + 1);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -644,8 +608,10 @@ export const AnimalFlashcardsScreen = () => {
     [
       activeLevel.pairPoints,
       activeLevel.streakBonus,
+      addRoundScore,
       cards,
-      incrementScore,
+      difficultyBand,
+      firstCardOpenedAt,
       isResolvingPair,
       openedCardIds,
       phase,
@@ -660,13 +626,13 @@ export const AnimalFlashcardsScreen = () => {
     <View style={styles.container}>
       <StatusBar hidden />
       <LinearGradient
-        colors={['#83D9FF', '#4EBEFF', '#2D86E0']}
+        colors={[...Colors.gradients.animalOcean]}
         style={StyleSheet.absoluteFill}
         start={{ x: 0.4, y: 0 }}
         end={{ x: 0.6, y: 1 }}
       />
 
-      {bubbleConfig.map((bubble, index) => (
+      {activeBubbles.map((bubble, index) => (
         <AquariumBubble
           key={`bubble-${index}`}
           left={bubble.left}
@@ -677,157 +643,172 @@ export const AnimalFlashcardsScreen = () => {
         />
       ))}
 
-      <View style={styles.coralRow} pointerEvents="none">
-        <Text style={styles.coralText}>🪸 🪸 🐚</Text>
-        <Text style={styles.coralText}>🐠 🪸 🌊</Text>
-      </View>
+      {!isVeryCompact && (
+        <View style={styles.coralRow} pointerEvents="none">
+          <Text style={styles.coralText}>🪸 🪸 🐚</Text>
+          <Text style={styles.coralText}>🐠 🪸 🌊</Text>
+        </View>
+      )}
 
       <Animated.View pointerEvents="none" style={[styles.wrongFlashLayer, wrongFlashAnimatedStyle]} />
 
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.headerRow}>
-          <Pressable style={styles.backButton} onPress={goBack}>
-            <Text style={styles.backButtonText}>◀</Text>
-          </Pressable>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isCompact && styles.scrollContentCompact,
+          ]}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+          scrollEnabled={isCompact}
+        >
+          <View style={styles.headerRow}>
+            <Pressable style={styles.backButton} onPress={goBack}>
+              <Text style={styles.backButtonText}>◀</Text>
+            </Pressable>
 
-          <View style={styles.titleChip}>
-            <Text style={styles.titleText}>ANIMAL FLASHCARDS</Text>
+            <View style={styles.titleChip}>
+              <Text style={[styles.titleText, isCompact && styles.titleTextCompact]}>
+                ANIMAL FLASHCARDS
+              </Text>
+            </View>
           </View>
-        </View>
 
-        <View style={styles.scoreRow}>
-          <ScoreBadge />
-        </View>
+          <View style={styles.scoreRow}>
+            <ScoreBadge game="animals" />
+          </View>
 
-        <View style={styles.levelRow}>
-          {(Object.keys(LEVEL_CONFIGS) as Level[]).map((levelKey) => {
-            const isActive = level === levelKey;
-            return (
-              <Pressable
-                key={levelKey}
-                onPress={() => handleLevelSelect(levelKey)}
-                style={[styles.levelButton, isActive && styles.levelButtonActive]}
-              >
-                <Text style={[styles.levelButtonText, isActive && styles.levelButtonTextActive]}>
-                  {LEVEL_CONFIGS[levelKey].label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+          <View style={[styles.levelRow, isCompact && styles.levelRowCompact]}>
+            <View style={styles.levelBadge}>
+              <Text style={styles.levelBadgeText}>
+                Level {currentLevel}/{20}
+              </Text>
+            </View>
+            <View style={styles.levelBadge}>
+              <Text style={styles.levelBadgeText}>
+                Unlocked: {unlockedLevel}
+              </Text>
+            </View>
+            <View style={styles.levelBadge}>
+              <Text style={styles.levelBadgeText}>
+                Stars: {totalAnimalStars}
+              </Text>
+            </View>
+          </View>
 
-        <View style={styles.infoRow}>
-          <View style={styles.infoBadge}>
-            <Text style={styles.infoLabel}>Moves</Text>
-            <Text style={styles.infoValue}>{moves}</Text>
+          <View style={[styles.infoRow, isCompact && styles.infoRowCompact]}>
+            <View style={styles.infoBadge}>
+              <Text style={styles.infoLabel}>Moves</Text>
+              <Text style={styles.infoValue}>{moves}</Text>
+            </View>
+            <View style={styles.infoBadge}>
+              <Text style={styles.infoLabel}>Pairs</Text>
+              <Text style={styles.infoValue}>{matchedPairs}/{totalPairs}</Text>
+            </View>
+            <View style={styles.infoBadge}>
+              <Text style={styles.infoLabel}>Lives</Text>
+              <Text style={styles.infoValue}>{lives > 0 ? '❤️'.repeat(lives) : '0'}</Text>
+            </View>
+            <View style={styles.infoBadge}>
+              <Text style={styles.infoLabel}>Time</Text>
+              <Text style={[styles.infoValue, remainingTime <= 10 && styles.infoValueDanger]}>
+                {remainingTime}s
+              </Text>
+            </View>
           </View>
-          <View style={styles.infoBadge}>
-            <Text style={styles.infoLabel}>Pairs</Text>
-            <Text style={styles.infoValue}>{matchedPairs}/{totalPairs}</Text>
-          </View>
-          <View style={styles.infoBadge}>
-            <Text style={styles.infoLabel}>Lives</Text>
-            <Text style={styles.infoValue}>{lives > 0 ? '❤️'.repeat(lives) : '0'}</Text>
-          </View>
-          <View style={styles.infoBadge}>
-            <Text style={styles.infoLabel}>Time</Text>
-            <Text style={[styles.infoValue, remainingTime <= 10 && styles.infoValueDanger]}>
-              {remainingTime}s
+
+          <View style={[styles.feedbackBanner, isCompact && styles.feedbackBannerCompact]}>
+            <Text style={[styles.feedbackText, isCompact && styles.feedbackTextCompact]}>
+              {feedbackLabel}
+            </Text>
+            <Text style={[styles.feedbackSubText, isCompact && styles.feedbackSubTextCompact]}>
+              Level L{currentLevel} · Round Score: {roundScore}
             </Text>
           </View>
-        </View>
 
-        <View style={styles.feedbackBanner}>
-          <Text style={styles.feedbackText}>{feedbackLabel}</Text>
-          <Text style={styles.feedbackSubText}>
-            Level: {activeLevel.label} · Round Score: {roundScore}
-          </Text>
-        </View>
-
-        <View
-          style={[
-            styles.boardWrapper,
-            {
-              paddingHorizontal: gridHorizontalPadding,
-              paddingVertical: gridVerticalPadding,
-            },
-          ]}
-          onLayout={(event) => {
-            const { width, height } = event.nativeEvent.layout;
-            setBoardLayout((previous) => {
-              const roundedWidth = Math.round(width);
-              const roundedHeight = Math.round(height);
-              if (roundedWidth === Math.round(previous.width) && roundedHeight === Math.round(previous.height)) {
-                return previous;
-              }
-              return { width, height };
-            });
-          }}
-        >
-          <CelebrationEffect trigger={celebrationTrigger} />
-
-          {phase !== 'playing' && (
-            <GameCountdown
-              introText={`${activeLevel.label} Level!`}
-              onComplete={handleCountdownComplete}
-            />
-          )}
-
-          {phase === 'playing' && (
-            <View style={[styles.grid, { rowGap: gridGap, columnGap: gridGap }]}>
-              {cards.map((card) => (
-                <MemoryCard
-                  key={card.uid}
-                  card={card}
-                  disabled={isResolvingPair || result !== 'none'}
-                  onPress={handleCardPress}
-                  cardWidth={cardWidth}
-                  cardHeight={cardHeight}
-                />
-              ))}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.footerRow}>
-          <Text style={styles.streakText}>Streak: {streak}</Text>
-          <Pressable
-            style={styles.restartButton}
-            onPress={() => startNewGame()}
+          <View
+            style={[
+              styles.boardWrapper,
+              isCompact && styles.boardWrapperCompact,
+              {
+                paddingHorizontal: gridHorizontalPadding,
+                paddingVertical: gridVerticalPadding,
+                height: boardHeight,
+                flex: isCompact ? 0 : 1,
+              },
+            ]}
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              setBoardLayout((previous) => {
+                const roundedWidth = Math.round(width);
+                const roundedHeight = Math.round(height);
+                if (roundedWidth === Math.round(previous.width) && roundedHeight === Math.round(previous.height)) {
+                  return previous;
+                }
+                return { width, height };
+              });
+            }}
           >
-            <Text style={styles.restartButtonText}>Restart</Text>
-          </Pressable>
-        </View>
+            <CelebrationEffect trigger={celebrationTrigger} />
+
+            {phase !== 'playing' && (
+              <GameCountdown
+                introText={`Memory Level ${currentLevel}!`}
+                onComplete={handleCountdownComplete}
+              />
+            )}
+
+            {phase === 'playing' && (
+              <View style={[styles.grid, { rowGap: gridGap, columnGap: gridGap }]}>
+                {cards.map((card) => (
+                  <MemoryCard
+                    key={card.uid}
+                    card={card}
+                    disabled={isResolvingPair || result !== 'none'}
+                    onPress={handleCardPress}
+                    cardWidth={cardWidth}
+                    cardHeight={cardHeight}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+
+          <View style={[styles.footerRow, isCompact && styles.footerRowCompact]}>
+            <Text style={[styles.streakText, isCompact && styles.streakTextCompact]}>
+              Streak: {streak} · Best: {bestStreak}
+            </Text>
+            <Pressable
+              style={[styles.restartButton, isCompact && styles.restartButtonCompact]}
+              onPress={() => startNewGame()}
+            >
+              <Text style={styles.restartButtonText}>Restart</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </SafeAreaView>
 
-      {result !== 'none' && (
-        <View style={styles.resultOverlay}>
-          <Animated.View style={[styles.resultCard, resultCardAnimatedStyle]}>
-            <Animated.Text style={[styles.resultEmoji, resultEmojiAnimatedStyle]}>
-              {result === 'won' ? '🏆' : '😵'}
-            </Animated.Text>
-            <Text style={styles.resultTitle}>
-              {result === 'won' ? 'You Won!' : remainingTime === 0 ? "Time's Up!" : 'Out Of Lives'}
-            </Text>
-            <Text style={styles.resultDescription}>
-              {result === 'won'
-                ? `Super job! You matched all ${totalPairs} pairs.`
-                : remainingTime === 0
-                  ? 'You ran out of time. Try again and move faster!'
-                  : 'Keep practicing and your memory will get stronger.'}
-            </Text>
-
-            <View style={styles.resultButtonsRow}>
-              <Pressable style={styles.resultButtonPrimary} onPress={() => startNewGame()}>
-                <Text style={styles.resultButtonPrimaryText}>Play Again</Text>
-              </Pressable>
-              <Pressable style={styles.resultButtonGhost} onPress={goBack}>
-                <Text style={styles.resultButtonGhostText}>Back Home</Text>
-              </Pressable>
-            </View>
-          </Animated.View>
-        </View>
-      )}
+      <RoundResultPopup
+        visible={showRoundResult}
+        summary={roundSummary}
+        gameTitle="Animal Memory"
+        onPlayAgain={() => startNewGame(currentLevel)}
+        onPlayNext={() => {
+          const nextLevel = roundSummary?.nextLevel ?? null;
+          if (nextLevel) {
+            setCurrentGameLevel('animals', nextLevel);
+            startNewGame(nextLevel);
+            return;
+          }
+          startNewGame(currentLevel);
+        }}
+        onBackHome={goBack}
+        onTryRecovery={(suggestedLevel) => {
+          activateRecoveryMode('animals', suggestedLevel);
+          startNewGame(suggestedLevel);
+        }}
+      />
     </View>
   );
 };
@@ -839,6 +820,15 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     paddingHorizontal: scale(10),
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  scrollContentCompact: {
+    paddingBottom: verticalScale(10),
   },
   bubble: {
     position: 'absolute',
@@ -879,6 +869,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: scale(8),
   },
+  levelRowCompact: {
+    marginTop: verticalScale(8),
+    gap: scale(6),
+  },
+  levelBadge: {
+    flex: 1,
+    minHeight: verticalScale(36),
+    borderRadius: scale(14),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.24)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
+    paddingHorizontal: scale(6),
+  },
+  levelBadgeText: {
+    fontFamily: Typography.fontFamily.display,
+    fontSize: scale(11),
+    color: Colors.white,
+    textAlign: 'center',
+  },
   levelButton: {
     flex: 1,
     minHeight: verticalScale(36),
@@ -894,7 +905,7 @@ const styles = StyleSheet.create({
     borderColor: '#FFD95E',
   },
   levelButtonText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(12),
     color: Colors.white,
   },
@@ -914,7 +925,7 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: scale(20),
     color: Colors.white,
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
   },
   titleChip: {
     flex: 1,
@@ -928,15 +939,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(10),
   },
   titleText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(16),
     color: Colors.white,
     textAlign: 'center',
+  },
+  titleTextCompact: {
+    fontSize: scale(14),
   },
   infoRow: {
     marginTop: verticalScale(12),
     flexDirection: 'row',
     gap: scale(8),
+  },
+  infoRowCompact: {
+    marginTop: verticalScale(8),
+    gap: scale(6),
   },
   infoBadge: {
     flex: 1,
@@ -948,13 +966,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   infoLabel: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(11),
     color: '#DDF4FF',
   },
   infoValue: {
     marginTop: verticalScale(3),
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(16),
     color: Colors.white,
     textAlign: 'center',
@@ -969,16 +987,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.9)',
     alignItems: 'center',
   },
+  feedbackBannerCompact: {
+    marginTop: verticalScale(8),
+    paddingVertical: verticalScale(6),
+  },
   feedbackText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(16),
     color: '#2279D5',
   },
+  feedbackTextCompact: {
+    fontSize: scale(14),
+  },
   feedbackSubText: {
     marginTop: verticalScale(2),
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(12),
     color: '#4B9CF3',
+  },
+  feedbackSubTextCompact: {
+    fontSize: scale(10),
   },
   boardWrapper: {
     flex: 1,
@@ -989,6 +1017,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.4)',
     overflow: 'hidden',
     justifyContent: 'center',
+  },
+  boardWrapperCompact: {
+    marginTop: verticalScale(8),
   },
   grid: {
     flexDirection: 'row',
@@ -1030,7 +1061,7 @@ const styles = StyleSheet.create({
   },
   cardBackQuestion: {
     marginTop: verticalScale(6),
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(26),
     color: Colors.white,
   },
@@ -1043,7 +1074,7 @@ const styles = StyleSheet.create({
   },
   cardAnimalName: {
     marginTop: verticalScale(8),
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(16),
     color: '#2F2F2F',
   },
@@ -1054,10 +1085,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  footerRowCompact: {
+    marginTop: verticalScale(8),
+  },
   streakText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(17),
     color: Colors.white,
+  },
+  streakTextCompact: {
+    fontSize: scale(14),
   },
   restartButton: {
     minWidth: scale(120),
@@ -1069,8 +1106,13 @@ const styles = StyleSheet.create({
     borderBottomColor: '#D45760',
     alignItems: 'center',
   },
+  restartButtonCompact: {
+    minWidth: scale(104),
+    paddingVertical: verticalScale(8),
+    paddingHorizontal: scale(14),
+  },
   restartButtonText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(16),
     color: Colors.white,
   },
@@ -1094,13 +1136,13 @@ const styles = StyleSheet.create({
   },
   resultTitle: {
     marginTop: verticalScale(8),
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(30),
     color: '#2A80D4',
   },
   resultDescription: {
     marginTop: verticalScale(10),
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(15),
     color: '#4A4A4A',
     textAlign: 'center',
@@ -1121,7 +1163,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#2587D1',
   },
   resultButtonPrimaryText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(17),
     color: Colors.white,
   },
@@ -1133,7 +1175,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   resultButtonGhostText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(16),
     color: '#267FD3',
   },

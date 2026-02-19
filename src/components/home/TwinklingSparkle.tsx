@@ -49,7 +49,7 @@ export const TwinklingSparkle: React.FC<{
         false
       )
     );
-  }, []);
+  }, [delay, sparkleOpacity, sparkleScale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: sparkleOpacity.value,

@@ -1,30 +1,38 @@
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Colors } from '@/constants/colors';
-import { useAppStore } from '@/store/useAppStore';
-
-const { width } = Dimensions.get('window');
-const scale = (size: number) => (width / 375) * size;
+import { Typography } from '@/constants/typography';
+import { type GameKey, useAppStore } from '@/store/useAppStore';
+import { scale } from '@/utils/responsive';
 
 /**
  * Score badge component.
  * Displays the user's total score from the global store.
  */
-export const ScoreBadge: React.FC = () => {
+type ScoreBadgeProps = {
+  game?: GameKey;
+};
+
+export const ScoreBadge: React.FC<ScoreBadgeProps> = ({ game }) => {
   const { progress } = useAppStore();
+  const bestScore = game ? progress.gameStats[game].bestScore : null;
 
   return (
     <View style={styles.scoreBadge}>
-      <Text style={styles.trophyEmoji}>🏆</Text>
-      <Text style={styles.scoreText}>SCORE: {progress.totalScore}</Text>
+      <View style={styles.row}>
+        <Text style={styles.trophyEmoji}>🏆</Text>
+        <Text style={styles.scoreText}>TOTAL: {progress.totalScore}</Text>
+      </View>
+      {game && (
+        <Text style={styles.bestText}>BEST THIS GAME: {bestScore}</Text>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   scoreBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: Colors.accent.main,
     paddingHorizontal: scale(16),
     paddingVertical: scale(8),
@@ -37,13 +45,23 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 8,
   },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   trophyEmoji: {
     fontSize: scale(24),
     marginRight: 8,
   },
   scoreText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(16),
     color: Colors.neutral[800],
+  },
+  bestText: {
+    marginTop: 2,
+    fontFamily: Typography.fontFamily.display,
+    fontSize: scale(11),
+    color: Colors.neutral[700],
   },
 });

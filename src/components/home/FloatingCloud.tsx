@@ -29,7 +29,7 @@ export const FloatingCloud: React.FC<{ delay: number; startX: number; top: numbe
         false
       )
     );
-  }, []);
+  }, [delay, translateX]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],

@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -23,12 +23,23 @@ import * as Haptics from 'expo-haptics';
 import { TactileButton } from '../src/components/TactileButton';
 import { PopBox } from '../src/components/PopBox';
 import { ScoreBadge } from '../src/components/ScoreBadge';
+import { AchievementsPopup } from '../src/components/AchievementsPopup';
+import { ProgressJourneyPopup } from '../src/components/ProgressJourneyPopup';
 import { Colors } from '../src/constants/colors';
+import { Typography } from '../src/constants/typography';
 import { useCloudTransition } from '../src/hooks/useCloudTransition';
+import { useAppStore } from '../src/store/useAppStore';
 import { useMusic } from './_layout'; // keep existing relative import
 
 // Utils
-import { scale, verticalScale, SCREEN_WIDTH, SCREEN_HEIGHT } from '../src/utils/responsive';
+import {
+  isSmallHeightDevice,
+  isVerySmallHeightDevice,
+  scale,
+  verticalScale,
+  SCREEN_WIDTH,
+  SCREEN_HEIGHT,
+} from '../src/utils/responsive';
 
 // Home Feature Components
 import { FloatingCloud } from '../src/components/home/FloatingCloud';
@@ -38,9 +49,18 @@ import { TwinklingSparkle } from '../src/components/home/TwinklingSparkle';
 import { DancingButterfly } from '../src/components/home/DancingButterfly';
 import { MascotOwl } from '../src/components/home/MascotOwl';
 import { AnimatedRainbow } from '../src/components/home/AnimatedRainbow';
-import { SettingsButton } from '../src/components/home/HomeButtons';
+import {
+  AchievementsButton,
+  JourneyButton,
+  SettingsButton,
+} from '../src/components/home/HomeButtons';
 import { WavyDivider } from '../src/components/home/WavyDivider';
 import { LanguageDropdown } from '../src/components/home/LanguageDropdown';
+import { ACHIEVEMENTS } from '../src/features/achievements/model/achievements';
+import {
+  PROGRESSION_THEMES,
+  type MathOperation,
+} from '../src/features/progression/model/progression';
 
 /**
  * Main HomeScreen Component.
@@ -59,7 +79,38 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { isMuted, toggleMute } = useMusic();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [language, setLanguage] = useState<'en' | 'es'>('en');
+  const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
+  const [isJourneyOpen, setIsJourneyOpen] = useState(false);
+  const language = useAppStore((state) => state.settings.language);
+  const unlockedAchievementsCount = useAppStore(
+    (state) => state.achievements.unlocked.length
+  );
+  const totalStars = useAppStore((state) => state.progression.totalStars);
+  const activeThemeId = useAppStore((state) => state.progression.activeThemeId);
+  const dailyGoal = useAppStore((state) => state.progression.dailyGoal);
+  const streak = useAppStore((state) => state.progression.streak);
+  const updateSettings = useAppStore((state) => state.updateSettings);
+  const mathOperationPrefs = useAppStore((state) => state.settings.mathOperationPrefs);
+  const setMathOperationEnabled = useAppStore((state) => state.setMathOperationEnabled);
+  const activeTheme = useMemo(
+    () => PROGRESSION_THEMES.find((theme) => theme.id === activeThemeId) ?? PROGRESSION_THEMES[0],
+    [activeThemeId]
+  );
+  const isCompact = isSmallHeightDevice;
+  const isVeryCompact = isVerySmallHeightDevice;
+  const gameButtonSize = isVeryCompact ? scale(98) : isCompact ? scale(108) : scale(120);
+  const sideButtonOffset = isVeryCompact ? scale(8) : isCompact ? scale(24) : scale(50);
+  const gameButtonsBottom = isVeryCompact
+    ? Math.max(insets.bottom + 30, verticalScale(46))
+    : isCompact
+      ? Math.max(insets.bottom + 50, verticalScale(70))
+      : verticalScale(100);
+  const topControlsTop = insets.top + (isVeryCompact ? 6 : 12);
+  const contentBottomPadding = isVeryCompact
+    ? verticalScale(88)
+    : isCompact
+      ? verticalScale(118)
+      : verticalScale(150);
 
   // Title Animation
   const titleScale = useSharedValue(1);
@@ -110,6 +161,27 @@ export default function HomeScreen() {
     navigateTo('/animal-flashcards');
   }, [navigateTo]);
 
+  const handleAchievementsPress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsAchievementsOpen(true);
+  }, []);
+
+  const handleJourneyPress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsJourneyOpen(true);
+  }, []);
+
+  const mathOperationOptions: {
+    key: MathOperation;
+    label: string;
+    emoji: string;
+  }[] = [
+      { key: 'add', label: '+', emoji: '➕' },
+      { key: 'subtract', label: '-', emoji: '➖' },
+      { key: 'multiply', label: 'x', emoji: '✖️' },
+      { key: 'modulo', label: '%', emoji: '🧮' },
+    ];
+
   // Bubble configurations — candy colors floating upward
   const bubbles = [
     { color: Colors.candy.pink, size: 30, startX: SCREEN_WIDTH * 0.1, delay: 0, duration: 8000 },
@@ -126,7 +198,7 @@ export default function HomeScreen() {
 
       {/* Sky gradient background */}
       <LinearGradient
-        colors={['#87CEEB', '#B0E0E6', '#98D8C8']}
+        colors={[...activeTheme.skyGradient]}
         style={styles.backgroundGradient}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
@@ -134,7 +206,7 @@ export default function HomeScreen() {
 
       {/* Grass at bottom */}
       <LinearGradient
-        colors={['#7CB342', '#558B2F', '#33691E']}
+        colors={[...activeTheme.grassGradient]}
         style={styles.grass}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
@@ -180,88 +252,125 @@ export default function HomeScreen() {
       <AnimatedRainbow />
 
       {/* Trees on sides */}
-      <Text style={[styles.tree, styles.treeLeft]}>🌳</Text>
-      <Text style={[styles.tree, styles.treeRight]}>🌳</Text>
+      {!isVeryCompact && (
+        <>
+          <Text style={[styles.tree, styles.treeLeft]}>🌳</Text>
+          <Text style={[styles.tree, styles.treeRight]}>🌳</Text>
+        </>
+      )}
 
       {/* Flowers — more for a lush garden feel */}
-      <Text style={[styles.flower, { left: scale(20), bottom: verticalScale(80) }]}>🌸</Text>
-      <Text style={[styles.flower, { right: scale(30), bottom: verticalScale(90) }]}></Text>
-      <Text style={[styles.flower, { left: scale(60), bottom: verticalScale(70) }]}>🌷</Text>
-      <Text style={[styles.flower, { right: scale(70), bottom: verticalScale(75) }]}>🌻</Text>
-      <Text style={[styles.flower, { left: scale(100), bottom: verticalScale(85) }]}>🌼</Text>
-      <Text style={[styles.flower, { right: scale(10), bottom: verticalScale(65) }]}>🌺</Text>
+      {!isVeryCompact && (
+        <>
+          <Text style={[styles.flower, { left: scale(20), bottom: verticalScale(80) }]}>🌸</Text>
+          <Text style={[styles.flower, { right: scale(30), bottom: verticalScale(90) }]} />
+          <Text style={[styles.flower, { left: scale(60), bottom: verticalScale(70) }]}>🌷</Text>
+          <Text style={[styles.flower, { right: scale(70), bottom: verticalScale(75) }]}>🌻</Text>
+          <Text style={[styles.flower, { left: scale(100), bottom: verticalScale(85) }]}>🌼</Text>
+          <Text style={[styles.flower, { right: scale(10), bottom: verticalScale(65) }]}>🌺</Text>
+        </>
+      )}
 
       {/* 🐝 Buzzing bee near flowers */}
-      <DancingButterfly startX={scale(120)} startY={verticalScale(600)} delay={800} />
+      {!isVeryCompact && (
+        <DancingButterfly startX={scale(120)} startY={verticalScale(600)} delay={800} />
+      )}
 
       {/* Top controls */}
-      <View style={styles.topControls}>
-        <SettingsButton onPress={() => setIsSettingsOpen(true)} />
-        {/* <ParentGateButton onPress={() => console.log('Parent Gate')} /> */}
+      <View style={[styles.topControls, { top: topControlsTop }]}>
+        <View style={styles.leftControlGroup}>
+          <SettingsButton onPress={() => setIsSettingsOpen(true)} />
+          <JourneyButton onPress={handleJourneyPress} totalStars={totalStars} />
+        </View>
+        <AchievementsButton
+          onPress={handleAchievementsPress}
+          unlockedCount={unlockedAchievementsCount}
+          totalCount={ACHIEVEMENTS.length}
+        />
       </View>
 
       {/* Main content */}
-      <View style={styles.mainContent}>
+      <View style={[styles.mainContent, { paddingBottom: contentBottomPadding }]}>
         {/* Enhanced title with wobble animation */}
         <Animated.View style={[styles.titleContainer, titleAnimatedStyle]}>
-          <Text style={styles.title}>LEARNY LAND</Text>
-          <Text style={styles.subtitle}>MATH & ADVENTURES</Text>
+          <Text style={[styles.title, isCompact && styles.titleCompact]}>LEARNY LAND</Text>
+          <Text style={[styles.subtitle, isCompact && styles.subtitleCompact]}>
+            MATH & ADVENTURES
+          </Text>
         </Animated.View>
 
         {/* Mascot */}
         <MascotOwl />
 
         {/* Books stack under mascot */}
-        <Text style={styles.books}>📚</Text>
+        <Text style={[styles.books, isCompact && styles.booksCompact]}>📚</Text>
       </View>
 
       {/* Game buttons with staggered bouncy entrance 🎯 */}
-      <View style={styles.gameButtonsContainer}>
+      <View
+        style={[
+          styles.gameButtonsContainer,
+          {
+            bottom: gameButtonsBottom,
+            gap: isCompact ? scale(10) : scale(15),
+          },
+        ]}
+      >
         {/* Math button — bounces in first (300ms delay) */}
         <Animated.View
           entering={BounceIn.delay(300).springify()}
-          style={[styles.gameButtonWrapper, { marginBottom: scale(50) }]}
+          style={[styles.gameButtonWrapper, { marginBottom: sideButtonOffset }]}
         >
           <TactileButton
             onPress={handleMathPress}
             color="#FF6B6B"
             size="large"
-            style={styles.gameButton}
+            style={[styles.gameButton, { width: gameButtonSize, height: gameButtonSize }]}
           >
-            <Text style={styles.gameButtonText}>1+2=?</Text>
-            <Text style={styles.gameButtonEmoji}>🚀</Text>
+            <Text style={[styles.gameButtonText, isCompact && styles.gameButtonTextCompact]}>
+              1+2=?
+            </Text>
+            <Text style={[styles.gameButtonEmoji, isCompact && styles.gameButtonEmojiCompact]}>
+              🚀
+            </Text>
           </TactileButton>
         </Animated.View>
 
         {/* Letters/ABC button — bounces in second (600ms delay) */}
         <Animated.View
           entering={BounceIn.delay(600).springify()}
-          style={[styles.gameButtonWrapper, styles.centerButton]}
+          style={[
+            styles.gameButtonWrapper,
+            styles.centerButton,
+            isCompact && styles.centerButtonCompact,
+          ]}
         >
           <TactileButton
             onPress={handleLettersPress}
             color={Colors.secondary.main}
             size="large"
-            style={styles.gameButton}
+            style={[styles.gameButton, { width: gameButtonSize, height: gameButtonSize }]}
           >
-            <Text style={styles.gameButtonEmoji}>🔤</Text>
-            <Text style={styles.abcText}>ABC</Text>
+            <Text style={[styles.gameButtonEmoji, isCompact && styles.gameButtonEmojiCompact]}>
+              🔤
+            </Text>
+            <Text style={[styles.abcText, isCompact && styles.abcTextCompact]}>ABC</Text>
           </TactileButton>
         </Animated.View>
 
         {/* Animal flashcards button — bounces in third (900ms delay) */}
         <Animated.View
           entering={BounceIn.delay(900).springify()}
-          style={[styles.gameButtonWrapper, { marginBottom: scale(50) }]}
+          style={[styles.gameButtonWrapper, { marginBottom: sideButtonOffset }]}
         >
           <TactileButton
             onPress={handleVideosPress}
             color={Colors.primary.main}
             size="large"
-            style={styles.gameButton}
+            style={[styles.gameButton, { width: gameButtonSize, height: gameButtonSize }]}
           >
-            <Text style={styles.playIcon}>🐾</Text>
-            <Text style={styles.abcText}>ANIMALS</Text>
+            <Text style={[styles.playIcon, isCompact && styles.playIconCompact]}>🐾</Text>
+            <Text style={[styles.abcText, isCompact && styles.abcTextCompact]}>ANIMALS</Text>
           </TactileButton>
         </Animated.View>
       </View>
@@ -270,6 +379,14 @@ export default function HomeScreen() {
       <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 10 }]}>
         {/* <SoundButton onPress={handleSoundToggle} isMuted={isMuted} /> */}
         <ScoreBadge />
+        <View style={styles.goalChip}>
+          <Text style={styles.goalChipText}>
+            ⭐ {dailyGoal.earnedStars}/{dailyGoal.targetStars}
+          </Text>
+          <Text style={styles.goalChipText}>
+            🔥 {streak.current} {streak.shieldAvailable ? '🛡️' : ''}
+          </Text>
+        </View>
       </View>
 
       {/* Settings PopBox */}
@@ -296,8 +413,43 @@ export default function HomeScreen() {
 
         <LanguageDropdown
           selected={language}
-          onSelect={setLanguage}
+          onSelect={(nextLanguage) => updateSettings({ language: nextLanguage })}
         />
+
+        <View style={styles.settingsDivider} />
+        <View style={styles.mathOpsBlock}>
+          <Text style={styles.settingLabel}>Math Signs (Parent Control)</Text>
+          <View style={styles.mathOpsRow}>
+            {mathOperationOptions.map((option) => {
+              const enabled = mathOperationPrefs[option.key];
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setMathOperationEnabled(option.key, !enabled);
+                  }}
+                  activeOpacity={0.85}
+                  style={[
+                    styles.mathOpChip,
+                    enabled ? styles.mathOpChipOn : styles.mathOpChipOff,
+                  ]}
+                >
+                  <Text style={styles.mathOpEmoji}>{option.emoji}</Text>
+                  <Text
+                    style={[
+                      styles.mathOpText,
+                      enabled ? styles.mathOpTextOn : styles.mathOpTextOff,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.mathOpsHint}>At least one sign will stay enabled.</Text>
+        </View>
 
         <WavyDivider />
 
@@ -326,6 +478,26 @@ export default function HomeScreen() {
 
         <Text style={styles.versionText}>Version 1.0.0</Text>
       </PopBox>
+
+      <AchievementsPopup
+        visible={isAchievementsOpen}
+        onClose={() => setIsAchievementsOpen(false)}
+      />
+
+      <ProgressJourneyPopup
+        visible={isJourneyOpen}
+        onClose={() => setIsJourneyOpen(false)}
+        onStartGame={(game) => {
+          setIsJourneyOpen(false);
+          if (game === 'math') {
+            navigateTo('/math-game');
+          } else if (game === 'alphabet') {
+            navigateTo('/alphabet');
+          } else {
+            navigateTo('/animal-flashcards');
+          }
+        }}
+      />
     </View>
   );
 }
@@ -373,8 +545,14 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: scale(16),
     zIndex: 100,
+  },
+  leftControlGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: scale(8),
   },
   bottomControls: {
     position: 'absolute',
@@ -386,6 +564,21 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: scale(16),
     zIndex: 100,
+    gap: scale(8),
+  },
+  goalChip: {
+    backgroundColor: 'rgba(255,255,255,0.86)',
+    borderRadius: scale(14),
+    borderWidth: 2,
+    borderColor: Colors.white,
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(6),
+    gap: verticalScale(1),
+  },
+  goalChipText: {
+    fontFamily: Typography.fontFamily.display,
+    fontSize: scale(11),
+    color: Colors.neutral[700],
   },
   mainContent: {
     flex: 1,
@@ -398,7 +591,7 @@ const styles = StyleSheet.create({
     marginBottom: verticalScale(20),
   },
   title: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(38),
     color: '#FF6B9D',
     textShadowColor: 'rgba(255, 255, 255, 0.8)',
@@ -406,16 +599,26 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
     letterSpacing: 2,
   },
+  titleCompact: {
+    fontSize: scale(32),
+  },
   subtitle: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(16),
     color: Colors.fun.purple,
     marginTop: 4,
     letterSpacing: 1,
   },
+  subtitleCompact: {
+    fontSize: scale(13),
+  },
   books: {
     fontSize: scale(60),
     marginTop: -scale(20),
+  },
+  booksCompact: {
+    fontSize: scale(48),
+    marginTop: -scale(14),
   },
   gameButtonsContainer: {
     position: 'absolute',
@@ -434,29 +637,45 @@ const styles = StyleSheet.create({
   centerButton: {
     marginTop: verticalScale(30),
   },
+  centerButtonCompact: {
+    marginTop: verticalScale(12),
+  },
   gameButton: {
     width: scale(120),
     height: scale(120),
   },
   gameButtonText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(24),
     color: Colors.white,
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
+  gameButtonTextCompact: {
+    fontSize: scale(20),
+  },
   gameButtonEmoji: {
     fontSize: scale(30),
     marginTop: 4,
   },
+  gameButtonEmojiCompact: {
+    fontSize: scale(24),
+    marginTop: 2,
+  },
   abcText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: scale(20),
     color: Colors.white,
   },
+  abcTextCompact: {
+    fontSize: scale(16),
+  },
   playIcon: {
     fontSize: scale(40),
+  },
+  playIconCompact: {
+    fontSize: scale(32),
   },
   chestEmoji: {
     fontSize: scale(28),
@@ -469,7 +688,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   settingLabel: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: 18,
     color: Colors.secondary[900],
   },
@@ -477,6 +696,51 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: 'rgba(0,0,0,0.1)',
     marginVertical: 16,
+  },
+  mathOpsBlock: {
+    gap: verticalScale(8),
+  },
+  mathOpsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: scale(8),
+  },
+  mathOpChip: {
+    minWidth: scale(70),
+    borderRadius: scale(14),
+    borderWidth: 2,
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(6),
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: scale(4),
+  },
+  mathOpChipOn: {
+    backgroundColor: Colors.primary.main,
+    borderColor: Colors.primary.dark,
+  },
+  mathOpChipOff: {
+    backgroundColor: Colors.white,
+    borderColor: Colors.neutral[300],
+  },
+  mathOpEmoji: {
+    fontSize: scale(15),
+  },
+  mathOpText: {
+    fontFamily: Typography.fontFamily.display,
+    fontSize: scale(14),
+  },
+  mathOpTextOn: {
+    color: Colors.white,
+  },
+  mathOpTextOff: {
+    color: Colors.neutral[700],
+  },
+  mathOpsHint: {
+    fontFamily: Typography.fontFamily.display,
+    fontSize: scale(11),
+    color: Colors.neutral[600],
   },
   settingsButtonsRow: {
     flexDirection: 'row',
@@ -500,12 +764,12 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(0,0,0,0.2)',
   },
   settingsButtonText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: 18,
     color: Colors.white,
   },
   versionText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: 12,
     color: Colors.neutral[400],
     textAlign: 'center',
