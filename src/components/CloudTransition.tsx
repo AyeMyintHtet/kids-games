@@ -86,7 +86,7 @@ export const CloudTransition: React.FC<CloudTransitionProps> = ({
         });
       }
     });
-  }, [isActive]);
+  }, [isActive, leftWallX, onCovered, onFinished, overlayOpacity, rightWallX]);
 
   const overlayStyle = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,

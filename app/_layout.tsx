@@ -1,13 +1,17 @@
 import '../global.css';
-import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useFonts } from 'expo-font';
+import { Stack } from 'expo-router';
+import * as SplashScreenModule from 'expo-splash-screen';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, LogBox } from 'react-native';
 import { SplashScreen } from '../src/components/SplashScreen';
 import { useBackgroundMusic } from '../src/hooks/useBackgroundMusic';
 import { CloudTransition } from '../src/components/CloudTransition';
+import { AchievementUnlockPopup } from '../src/components/AchievementUnlockPopup';
 import { CloudTransitionProvider, useCloudTransition } from '../src/hooks/useCloudTransition';
+import { useAppStore } from '../src/store/useAppStore';
 
 LogBox.ignoreLogs([
   'SafeAreaView has been deprecated',
@@ -45,9 +49,6 @@ const queryClient = new QueryClient({
   },
 });
 
-import { useFonts } from 'expo-font';
-import * as SplashScreenModule from 'expo-splash-screen';
-
 // Prevent auto-hiding the splash screen
 SplashScreenModule.preventAutoHideAsync();
 
@@ -57,12 +58,15 @@ SplashScreenModule.preventAutoHideAsync();
  * Background music lives HERE so it never re-mounts on navigation.
  */
 export default function RootLayout() {
+  const musicEnabled = useAppStore((state) => state.settings.musicEnabled);
+  const updateSettings = useAppStore((state) => state.updateSettings);
+
   const [fontsLoaded] = useFonts({
     'SuperWonder': require('../src/assets/font/SuperWonder.ttf'),
   });
 
   const [isAppReady, setIsAppReady] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(!musicEnabled);
 
   // Singleton music — plays once, survives all navigation
   const { setMuted } = useBackgroundMusic();
@@ -70,8 +74,18 @@ export default function RootLayout() {
   const toggleMute = () => {
     const newMuted = !isMuted;
     setIsMuted(newMuted);
-    setMuted(newMuted);
+    updateSettings({
+      musicEnabled: !newMuted,
+      soundEnabled: !newMuted,
+    });
+    void setMuted(newMuted);
   };
+
+  useEffect(() => {
+    const newMuted = !musicEnabled;
+    setIsMuted(newMuted);
+    void setMuted(newMuted);
+  }, [musicEnabled, setMuted]);
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -136,6 +150,7 @@ function StackWithCloudOverlay() {
         onCovered={handleCovered}
         onFinished={handleFinished}
       />
+      <AchievementUnlockPopup />
     </>
   );
 }

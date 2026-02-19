@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { StyleSheet, Dimensions, ViewStyle, TextStyle } from 'react-native';
+import { StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -14,19 +14,17 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 import { Colors } from '../constants/colors';
+import { Typography } from '../constants/typography';
+import { normalizeTouchSize } from '../utils/responsive';
 
 const hapticSound = require('../assets/sounds/haptic.wav');
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /**
  * Responsive sizing based on screen dimensions.
  * Ensures buttons meet minimum 88x88 pt requirement for kids.
  */
 const getResponsiveSize = (baseSize: number): number => {
-  const minDimension = Math.min(SCREEN_WIDTH, SCREEN_HEIGHT);
-  const scaleFactor = minDimension / 375; // Base on iPhone SE width
-  return Math.max(baseSize * scaleFactor, 88); // Minimum 88pt for fat fingers
+  return normalizeTouchSize(baseSize);
 };
 
 /**
@@ -45,8 +43,8 @@ interface TactileButtonProps {
   color: string;
   shadowColor?: string;
   size?: 'small' | 'medium' | 'large';
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   disabled?: boolean;
   emoji?: string;
   label?: string;
@@ -120,7 +118,7 @@ export const TactileButton: React.FC<TactileButtonProps> = ({
       -1,
       true
     );
-  }, []);
+  }, [idleRotate, idleY]);
 
   /**
    * Pre-load the tap sound on mount.
@@ -275,7 +273,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   label: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: getResponsiveSize(16),
     color: Colors.white,
     textAlign: 'center',

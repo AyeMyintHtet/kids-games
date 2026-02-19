@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Audio } from 'expo-av';
 import { Colors } from '@/constants/colors';
+import { Typography } from '@/constants/typography';
 
 // Countdown sound asset — played once when the 3..2..1 phase begins
 const COUNTDOWN_SOUND = require('@/assets/sounds/countdown.mp3');
@@ -75,7 +76,7 @@ export const GameCountdown: React.FC<GameCountdownProps> = ({
   useEffect(() => {
     // Fade in the intro text
     introOpacity.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.quad) });
-  }, []);
+  }, [introOpacity]);
 
   // Cleanup sound on unmount to prevent memory leaks
   useEffect(() => {
@@ -133,7 +134,7 @@ export const GameCountdown: React.FC<GameCountdownProps> = ({
     return () => {
       isMounted = false;
     };
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps — intentional one-shot
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <View style={styles.container}>
@@ -159,7 +160,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   introText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: 42,
     color: Colors.white,
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
@@ -168,7 +169,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   countdownText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: 120,
     color: Colors.white,
     textShadowColor: 'rgba(0, 0, 0, 0.3)',

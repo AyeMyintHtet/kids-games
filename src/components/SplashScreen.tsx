@@ -85,7 +85,7 @@ const ConfettiPiece: React.FC<ConfettiPieceProps> = ({
         false
       )
     );
-  }, []);
+  }, [delay, duration, opacity, rotate, size, translateX, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -150,7 +150,7 @@ const PulsingRing: React.FC<PulsingRingProps> = ({ delay, color, maxScale }) => 
         false
       )
     );
-  }, []);
+  }, [delay, maxScale, ringOpacity, ringScale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: ringScale.value }],
@@ -214,7 +214,7 @@ const BouncingBall: React.FC<BouncingBallProps> = ({ color, delay, size, startX 
 
     const timer = setTimeout(startAnimation, delay);
     return () => clearTimeout(timer);
-  }, []);
+  }, [delay, squash, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -292,7 +292,7 @@ const FloatingStar: React.FC<FloatingStarProps> = ({
       -1,
       false
     );
-  }, []);
+  }, [delay, starOpacity, starRotate, starScale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: starOpacity.value,
@@ -366,7 +366,7 @@ const AnimatedLetter: React.FC<AnimatedLetterProps> = ({ letter, index }) => {
         false
       )
     );
-  }, []);
+  }, [index, letterScale, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -427,7 +427,7 @@ export const SplashScreen: React.FC = () => {
       -1,
       false
     );
-  }, []);
+  }, [bgRotate]);
 
   const bgAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${bgRotate.value}deg` }],

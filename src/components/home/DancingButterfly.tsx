@@ -48,7 +48,7 @@ export const DancingButterfly: React.FC<{
         true
       )
     );
-  }, []);
+  }, [delay, translateX, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [

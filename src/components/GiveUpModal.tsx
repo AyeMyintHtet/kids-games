@@ -12,6 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/colors';
+import { Typography } from '@/constants/typography';
 
 const PLAY_ICON = require('@/assets/images/play.png');
 const CLOSE_ICON = require('@/assets/images/close.png');
@@ -91,13 +92,13 @@ export const GiveUpModal: React.FC<GiveUpModalProps> = ({ onConfirm, onCancel })
       -1,
       true
     );
-  }, []); // Run on mount
+  }, [closeIconScale, mascotScale, modalScale, playIconScale, stickerRotate]); // Run on mount
 
   return (
     <View style={styles.modalBackdrop}>
       <Animated.View style={[styles.giveUpModalCard, modalAnimatedStyle]}>
         <LinearGradient
-          colors={['#FFFDF0', '#FFEFF8', '#EAF6FF']}
+          colors={[...Colors.gradients.modalPastel]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.giveUpModalGradient}
@@ -202,7 +203,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   giveUpStickerText: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: 18,
     color: Colors.secondary.dark,
   },
@@ -220,14 +221,14 @@ const styles = StyleSheet.create({
     fontSize: 40,
   },
   giveUpTitle: {
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: 34,
     color: Colors.secondary.dark,
     textAlign: 'center',
   },
   giveUpMessage: {
     marginTop: 8,
-    fontFamily: 'SuperWonder',
+    fontFamily: Typography.fontFamily.display,
     fontSize: 22,
     color: Colors.primary.dark,
     textAlign: 'center',

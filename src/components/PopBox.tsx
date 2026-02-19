@@ -74,7 +74,7 @@ const SparkleDecor: React.FC<{
       -1,
       false
     );
-  }, []);
+  }, [delay, sparkleOpacity, sparkleRotate, sparkleScale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -120,7 +120,7 @@ const BouncingDot: React.FC<{
         false
       )
     );
-  }, []);
+  }, [bounceY, delay]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: bounceY.value }],

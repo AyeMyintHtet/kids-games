@@ -63,7 +63,7 @@ export const FloatingBubble: React.FC<{
         false
       )
     );
-  }, []);
+  }, [bubbleOpacity, delay, duration, translateX, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
