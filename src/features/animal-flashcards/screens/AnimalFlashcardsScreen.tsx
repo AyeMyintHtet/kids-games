@@ -80,7 +80,7 @@ const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
     label: 'Medium',
     pairs: 6,
     columns: 4,
-    lives: 5,
+    lives: 7,
     durationSeconds: 75,
     pairPoints: 20,
     streakBonus: 5,
@@ -90,7 +90,7 @@ const LEVEL_CONFIGS: Record<Level, LevelConfig> = {
     label: 'Hard',
     pairs: 8,
     columns: 4,
-    lives: 4,
+    lives: 8,
     durationSeconds: 60,
     pairPoints: 25,
     streakBonus: 8,
@@ -350,7 +350,7 @@ export const AnimalFlashcardsScreen = () => {
 
   const totalPairs = activeLevel.pairs;
   const gridGap = useMemo(
-    () => scale(activeLevel.columns === 4 ? 6 : 10),
+    () => scale(activeLevel.columns === 4 ? 4 : 8),
     [activeLevel.columns]
   );
   const gridHorizontalPadding = useMemo(
@@ -957,6 +957,7 @@ const styles = StyleSheet.create({
     fontFamily: 'SuperWonder',
     fontSize: scale(16),
     color: Colors.white,
+    textAlign: 'center',
   },
   infoValueDanger: {
     color: '#FFE67A',
@@ -993,6 +994,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
+    alignContent: 'center',
     columnGap: scale(8),
   },
   cardPressable: {
@@ -1012,7 +1014,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.9)',
-    backfaceVisibility: 'hidden',
     shadowColor: '#022F5F',
     shadowOpacity: 0.25,
     shadowOffset: { width: 0, height: 6 },

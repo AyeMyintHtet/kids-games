@@ -58,7 +58,7 @@ SplashScreenModule.preventAutoHideAsync();
  */
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    'SuperWonder': require('../src/assets/font/Super Wonder.ttf'),
+    'SuperWonder': require('../src/assets/font/SuperWonder.ttf'),
   });
 
   const [isAppReady, setIsAppReady] = useState(false);

@@ -5,7 +5,6 @@ import {
   ImageBackground,
   StatusBar,
   Text,
-
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +23,10 @@ import { ScoreBadge } from '@/components/ScoreBadge';
 import { useAppStore } from '@/store/useAppStore';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
+import { CelebrationEffect } from '@/components/CelebrationEffect';
+import { GameCountdown } from '@/components/GameCountdown';
+
 
 const BACKGROUND_IMAGE = require('@/assets/images/math/background.png');
 // Using the requested path for the board image
@@ -31,8 +34,7 @@ const BACKGROUND_IMAGE = require('@/assets/images/math/background.png');
 const BOARD_IMAGE = require('@/assets/images/math/board.png');
 const WRONG_IMAGE = require('@/assets/images/math/wrong.png');
 const PAUSE_ICON = require('@/assets/images/pause.png');
-const PLAY_ICON = require('@/assets/images/play.png');
-const CLOSE_ICON = require('@/assets/images/close.png');
+import { GiveUpModal } from '@/components/GiveUpModal';
 
 const generateQuestion = () => {
   // 1. Generate two random numbers (e.g., between 1 and 10)
@@ -60,22 +62,19 @@ const generateQuestion = () => {
   };
 };
 
-import { Audio } from 'expo-av';
-import { CelebrationEffect } from '@/components/CelebrationEffect';
-import { GameCountdown } from '@/components/GameCountdown';
-import { LinearGradient } from 'expo-linear-gradient';
+
 
 const WRONG_SOUND = require('@/assets/sounds/wrong.mp3');
 const CORRECT_SOUND = require('@/assets/sounds/correct.mp3');
 const BRAVO_SOUND = require('@/assets/sounds/bravo.mp3');
 const EXCELLENT_SOUND = require('@/assets/sounds/excellent.mp3');
-const [showGiveUpModal, setShowGiveUpModal] = useState(false);
+
 // ... (existing imports)
 
 export const MathGameScreen = () => {
   const { goBack } = useCloudTransition();
   const [sound, setSound] = useState<Audio.Sound>();
-
+  const [showGiveUpModal, setShowGiveUpModal] = useState(false);
   // Cleanup sound
   useEffect(() => {
     return sound
@@ -196,6 +195,17 @@ export const MathGameScreen = () => {
     setShowGiveUpModal(true);
   };
 
+  const handleCancelGiveUp = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowGiveUpModal(false);
+  };
+
+  const handleConfirmGiveUp = () => {
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    setShowGiveUpModal(false);
+    goBack();
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar hidden />
@@ -206,14 +216,19 @@ export const MathGameScreen = () => {
       >
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.header}>
-            <Pressable onPress={openGiveUpModal} >
-              <Animated.View style={[styles.pauseButton, pauseAnimatedStyle]}>
-                <Image source={PAUSE_ICON} style={styles.pauseIcon} contentFit="contain" />
-              </Animated.View>
-            </Pressable>
+            <View style={styles.headerLeft}>
+              <Pressable onPress={openGiveUpModal} >
+                <Animated.View style={[styles.pauseButton, pauseAnimatedStyle]}>
+                  <Image source={PAUSE_ICON} style={styles.pauseIcon} contentFit="contain" />
+                </Animated.View>
+              </Pressable>
+            </View>
             <View style={styles.titleContainer}>
               <Text style={styles.title}>Math Adventure</Text>
             </View>
+            <View></View>
+          </View>
+          <View style={styles.headerRight}>
             <ScoreBadge />
           </View>
 
@@ -267,70 +282,17 @@ export const MathGameScreen = () => {
                     </View>
                   </View>
                 </Animated.View>
-
-                <View style={styles.footer}>
-                  <TactileButton
-                    onPress={() => goBack()}
-                    color={Colors.fun.coral}
-                    size="small"
-                    label="Give Up"
-                    textStyle={{ color: Colors.white, fontSize: 32 }}
-                    style={{
-                      borderRadius: 30,
-                      minWidth: 160,
-                      paddingHorizontal: 0,
-                      paddingVertical: 0,
-                    }}
-                  />
-                </View>
               </>
             )}
           </View>
         </SafeAreaView>
       </ImageBackground>
-      {/* {showGiveUpModal && (
-        <View style={styles.modalBackdrop}>
-          <Animated.View style={[styles.giveUpModalCard, giveUpModalAnimatedStyle]}>
-            <LinearGradient
-              colors={['#FFFDF0', '#FFEFF8', '#EAF6FF']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.giveUpModalGradient}
-            >
-              <View style={styles.modalBubbleOne} />
-              <View style={styles.modalBubbleTwo} />
-              <View style={styles.modalBubbleThree} />
-
-              <Animated.View style={[styles.giveUpStickerWrap, stickerAnimatedStyle]}>
-                <Text style={styles.giveUpStickerText}>🫧 Break Time 🫧</Text>
-              </Animated.View>
-
-              <Animated.View style={[styles.giveUpMascotCircle, mascotAnimatedStyle]}>
-                <Text style={styles.giveUpMascot}>🐣</Text>
-              </Animated.View>
-
-              <Text style={styles.giveUpTitle}>Give Up For Now?</Text>
-              <Text style={styles.giveUpMessage}>
-                You can come back and play again anytime.
-              </Text>
-
-
-              <View style={styles.giveUpButtonsRow}>
-                <Pressable onPress={handleConfirmGiveUp}>
-                  <Animated.View style={closeIconAnimatedStyle}>
-                    <Image source={CLOSE_ICON} style={{ width: 60, height: 60 }} contentFit="contain" />
-                  </Animated.View>
-                </Pressable>
-                <Pressable onPress={handleCancelGiveUp}>
-                  <Animated.View style={playIconAnimatedStyle}>
-                    <Image source={PLAY_ICON} style={{ width: 60, height: 60 }} contentFit="contain" />
-                  </Animated.View>
-                </Pressable>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-        </View>
-      )} */}
+      {showGiveUpModal && (
+        <GiveUpModal
+          onConfirm={handleConfirmGiveUp}
+          onCancel={handleCancelGiveUp}
+        />
+      )}
     </View>
   );
 };
@@ -348,10 +310,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'column',
-    justifyContent: "center",
-    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingTop: 10,
+    paddingHorizontal: 20,
+    width: '100%',
+  },
+  headerLeft: {
+    // flex: 1,
+    // alignItems: 'flex-start',
+  },
+  headerRight: {
+    width: 150,
+    marginLeft: 20,
+    marginTop: 10
   },
   backButton: {
     width: 50,
@@ -367,7 +340,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 2,
     borderColor: Colors.primary.main,
-    marginBottom: 10,
+    marginRight: 20
   },
   title: {
     fontFamily: 'SuperWonder',
@@ -437,7 +410,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
     width: '100%',
-    gap: 15,
+    gap: 6,
   },
   answerButton: {
     width: '30%',
