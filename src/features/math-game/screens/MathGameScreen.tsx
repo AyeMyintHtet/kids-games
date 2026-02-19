@@ -454,7 +454,7 @@ export const MathGameScreen = () => {
                             <Image
                               source={WRONG_IMAGE}
                               style={{ width: wrongIconSize, height: wrongIconSize }}
-                              resizeMode="contain"
+                              contentFit="contain"
                             />
                           ) : (
                             <Text style={[styles.answerText, { fontSize: answerTextSize }]}>
