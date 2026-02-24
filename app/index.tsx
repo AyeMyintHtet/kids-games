@@ -26,6 +26,7 @@ import { ScoreBadge } from '../src/components/ScoreBadge';
 import { AchievementsPopup } from '../src/components/AchievementsPopup';
 import { ProgressJourneyPopup } from '../src/components/ProgressJourneyPopup';
 import { ParentProgressPopup } from '../src/components/ParentProgressPopup';
+import { ProfileOnboardingPopup } from '../src/components/ProfileOnboardingPopup';
 import { Colors } from '../src/constants/colors';
 import { Config } from '../src/constants/config';
 import { Typography } from '../src/constants/typography';
@@ -104,6 +105,8 @@ export default function HomeScreen() {
   const activeThemeId = useAppStore((state) => state.progression.activeThemeId);
   const dailyGoal = useAppStore((state) => state.progression.dailyGoal);
   const streak = useAppStore((state) => state.progression.streak);
+  const profile = useAppStore((state) => state.profile);
+  const saveProfile = useAppStore((state) => state.saveProfile);
   const lastSession = useAppStore((state) => state.lastSession);
   const clearLastSession = useAppStore((state) => state.clearLastSession);
   const updateSettings = useAppStore((state) => state.updateSettings);
@@ -118,6 +121,7 @@ export default function HomeScreen() {
     if (isSessionExpired(lastSession.updatedAt)) return null;
     return lastSession;
   }, [lastSession]);
+  const needsProfileOnboarding = !profile.nickname || !profile.gender;
   const isCompact = isSmallHeightDevice;
   const isVeryCompact = isVerySmallHeightDevice;
   const gameButtonSize = isVeryCompact ? scale(98) : isCompact ? scale(108) : scale(120);
@@ -210,6 +214,13 @@ export default function HomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     navigateTo(getResumeRoute(resumableSession));
   }, [navigateTo, resumableSession]);
+
+  const handleSaveProfile = useCallback(
+    (payload: { nickname: string; gender: 'male' | 'female' }) => {
+      saveProfile(payload);
+    },
+    [saveProfile]
+  );
 
   const mathOperationOptions: {
     key: MathOperation;
@@ -338,6 +349,9 @@ export default function HomeScreen() {
           <Text style={[styles.subtitle, isCompact && styles.subtitleCompact]}>
             MATH & ADVENTURES
           </Text>
+          {profile.nickname ? (
+            <Text style={styles.nicknameText}>Hi {profile.nickname}!</Text>
+          ) : null}
         </Animated.View>
 
         {/* Mascot */}
@@ -545,6 +559,13 @@ export default function HomeScreen() {
         visible={isParentProgressOpen}
         onClose={() => setIsParentProgressOpen(false)}
       />
+
+      <ProfileOnboardingPopup
+        visible={needsProfileOnboarding}
+        initialNickname={profile.nickname}
+        initialGender={profile.gender}
+        onSave={handleSaveProfile}
+      />
     </View>
   );
 }
@@ -644,6 +665,12 @@ const styles = StyleSheet.create({
   },
   subtitleCompact: {
     fontSize: scale(13),
+  },
+  nicknameText: {
+    marginTop: verticalScale(4),
+    fontFamily: Typography.fontFamily.display,
+    fontSize: scale(14),
+    color: Colors.secondary.dark,
   },
   books: {
     fontSize: scale(60),

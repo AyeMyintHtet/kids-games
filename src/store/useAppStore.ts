@@ -6,6 +6,11 @@ import {
   type AchievementId,
 } from '@/features/achievements/model/achievements';
 import {
+  getProfileAvatar,
+  validateNickname,
+  type ProfileGender,
+} from '@/features/profile/model/profile';
+import {
   DAILY_ROUND_GOAL_DEFAULT,
   MAX_GAME_LEVEL,
   calculateStarsForRound,
@@ -36,6 +41,13 @@ interface UserSettings {
   difficulty: 'easy' | 'medium' | 'hard';
   language: 'en' | 'es';
   mathOperationPrefs: Record<MathOperation, boolean>;
+}
+
+export interface UserProfile {
+  nickname: string;
+  gender: ProfileGender | null;
+  avatarEmoji: string;
+  onboardingCompletedAt: string | null;
 }
 
 export type GameKey = 'math' | 'alphabet' | 'animals';
@@ -267,7 +279,12 @@ export interface ActivityLogEntry {
 interface AppState {
   // User settings
   settings: UserSettings;
+  profile: UserProfile;
   updateSettings: (settings: Partial<UserSettings>) => void;
+  saveProfile: (payload: {
+    nickname: string;
+    gender: ProfileGender;
+  }) => void;
   setMathOperationEnabled: (operation: MathOperation, enabled: boolean) => void;
 
   // Game progress
@@ -315,6 +332,13 @@ const initialSettings: UserSettings = {
     multiply: false,
     modulo: false,
   },
+};
+
+const initialProfile: UserProfile = {
+  nickname: '',
+  gender: null,
+  avatarEmoji: '🧒',
+  onboardingCompletedAt: null,
 };
 
 const createInitialGameStats = (): Record<GameKey, PerGameStats> => ({
@@ -503,6 +527,35 @@ const sanitizeActivityLog = (input: unknown): ActivityLogEntry[] => {
   }
 
   return trimActivityLog(entries);
+};
+
+const sanitizeProfile = (input: unknown): UserProfile => {
+  if (!input || typeof input !== 'object') {
+    return initialProfile;
+  }
+
+  const candidate = input as Partial<UserProfile>;
+  const gender: ProfileGender | null =
+    candidate.gender === 'male' || candidate.gender === 'female'
+      ? candidate.gender
+      : null;
+  const validatedNickname = validateNickname(candidate.nickname ?? '');
+  const hasValidNickname = validatedNickname.valid;
+
+  return {
+    nickname: hasValidNickname ? validatedNickname.normalized : '',
+    gender: hasValidNickname ? gender : null,
+    avatarEmoji:
+      hasValidNickname && gender
+        ? getProfileAvatar(gender)
+        : initialProfile.avatarEmoji,
+    onboardingCompletedAt:
+      hasValidNickname && gender
+        ? typeof candidate.onboardingCompletedAt === 'string'
+          ? candidate.onboardingCompletedAt
+          : null
+        : null,
+  };
 };
 
 const getRoundConfigForGame = (game: GameKey, level: number) => {
@@ -807,6 +860,7 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       // Settings
       settings: initialSettings,
+      profile: initialProfile,
       updateSettings: (newSettings) =>
         set((state) => ({
           settings: {
@@ -818,6 +872,23 @@ export const useAppStore = create<AppState>()(
             },
           },
         })),
+      saveProfile: ({ nickname, gender }) =>
+        set((state) => {
+          const validatedNickname = validateNickname(nickname);
+          if (!validatedNickname.valid) {
+            return state;
+          }
+
+          const savedAt = new Date().toISOString();
+          return {
+            profile: {
+              nickname: validatedNickname.normalized,
+              gender,
+              avatarEmoji: getProfileAvatar(gender),
+              onboardingCompletedAt: state.profile.onboardingCompletedAt ?? savedAt,
+            },
+          };
+        }),
       setMathOperationEnabled: (operation, enabled) =>
         set((state) => {
           const currentPrefs = state.settings.mathOperationPrefs;
@@ -1319,6 +1390,9 @@ export const useAppStore = create<AppState>()(
         const mergedProgression = sanitizeProgression(
           (persisted as Partial<AppState>).progression
         );
+        const mergedProfile = sanitizeProfile(
+          (persisted as { profile?: unknown }).profile
+        );
         const mergedActivityLog = sanitizeActivityLog(
           (persisted as { activityLog?: unknown }).activityLog
         );
@@ -1404,6 +1478,7 @@ export const useAppStore = create<AppState>()(
               ...(persisted.settings?.mathOperationPrefs ?? {}),
             },
           },
+          profile: mergedProfile,
           progress: mergedProgress,
           progression: finalProgression,
           achievements: {

@@ -153,6 +153,7 @@ interface PopBoxProps {
   children?: React.ReactNode;
   variant?: 'blue' | 'green' | 'orange' | 'purple'; // Different themes
   showCloseButton?: boolean;
+  dismissible?: boolean;
 }
 
 /**
@@ -174,6 +175,7 @@ export const PopBox: React.FC<PopBoxProps> = ({
   children,
   variant = 'blue',
   showCloseButton = true,
+  dismissible = true,
 }) => {
   // Theme configuration based on variant
   const themes = {
@@ -213,6 +215,7 @@ export const PopBox: React.FC<PopBoxProps> = ({
   }, [visible]);
 
   const handleClose = () => {
+    if (!dismissible) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onClose();
   };
@@ -227,7 +230,7 @@ export const PopBox: React.FC<PopBoxProps> = ({
       onRequestClose={handleClose}
       statusBarTranslucent
     >
-      <TouchableWithoutFeedback onPress={handleClose}>
+      <TouchableWithoutFeedback onPress={dismissible ? handleClose : undefined}>
         <Animated.View
           entering={FadeIn.duration(200)}
           exiting={FadeOut.duration(200)}
