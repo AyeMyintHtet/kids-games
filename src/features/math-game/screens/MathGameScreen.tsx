@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -20,8 +20,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { TactileButton } from '@/components/TactileButton';
 import { Colors } from '@/constants/colors';
+import { Config } from '@/constants/config';
 import { ScoreBadge } from '@/components/ScoreBadge';
-import { useAppStore } from '@/store/useAppStore';
+import {
+  useAppStore,
+  type MathSessionPayload,
+  type RoundSummary,
+  type SavedSession,
+} from '@/store/useAppStore';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
@@ -46,7 +52,6 @@ import {
   scale,
   verticalScale,
 } from '@/utils/responsive';
-import type { RoundSummary } from '@/store/useAppStore';
 
 const BACKGROUND_IMAGE = require('@/assets/images/math/background.png');
 // Using the requested path for the board image
@@ -60,7 +65,17 @@ const CORRECT_SOUND = require('@/assets/sounds/correct.mp3');
 const BRAVO_SOUND = require('@/assets/sounds/bravo.mp3');
 const EXCELLENT_SOUND = require('@/assets/sounds/excellent.mp3');
 
-// ... (existing imports)
+const isMathSession = (
+  session: SavedSession | null
+): session is Extract<SavedSession, { game: 'math' }> => {
+  return Boolean(session && session.game === 'math');
+};
+
+const isSessionExpired = (updatedAt: string): boolean => {
+  const updatedMs = new Date(updatedAt).getTime();
+  if (!Number.isFinite(updatedMs)) return true;
+  return Date.now() - updatedMs > Config.game.sessionTimeout;
+};
 
 export const MathGameScreen = () => {
   const { goBack } = useCloudTransition();
@@ -72,6 +87,9 @@ export const MathGameScreen = () => {
   const currentLevel = useAppStore((state) => state.progression.games.math.currentLevel);
   const setCurrentGameLevel = useAppStore((state) => state.setCurrentGameLevel);
   const activateRecoveryMode = useAppStore((state) => state.activateRecoveryMode);
+  const lastSession = useAppStore((state) => state.lastSession);
+  const saveLastSession = useAppStore((state) => state.saveLastSession);
+  const clearLastSession = useAppStore((state) => state.clearLastSession);
   const mathOperationPrefs = useAppStore((state) => state.settings.mathOperationPrefs);
   const levelConfig = useMemo(() => getMathLevelConfig(currentLevel), [currentLevel]);
   const parentEnabledOperations = useMemo<MathOperation[]>(() => {
@@ -166,6 +184,7 @@ export const MathGameScreen = () => {
   const [answeredCount, setAnsweredCount] = useState(0);
   const [roundSummary, setRoundSummary] = useState<RoundSummary | null>(null);
   const [showRoundResult, setShowRoundResult] = useState(false);
+  const hasRestoredSessionRef = useRef(false);
 
   // Animation Values
   const boardScale = useSharedValue(0);
@@ -213,10 +232,125 @@ export const MathGameScreen = () => {
     setShowRoundResult(true);
   };
 
+  const restoreSession = (payload: MathSessionPayload, updatedAt: string) => {
+    const updatedMs = new Date(updatedAt).getTime();
+    const elapsedAtSave =
+      payload.sessionStartedAt && Number.isFinite(updatedMs)
+        ? Math.max(0, updatedMs - payload.sessionStartedAt)
+        : null;
+
+    setCurrentData(payload.currentData);
+    setWrongAnswer(payload.wrongAnswer);
+    setStreak(Math.max(0, Math.round(payload.streak)));
+    setCelebrationTrigger(0);
+    setRoundScore(Math.max(0, Math.round(payload.roundScore)));
+    setCorrectCount(Math.max(0, Math.round(payload.correctCount)));
+    setWrongCount(Math.max(0, Math.round(payload.wrongCount)));
+    setBestStreak(Math.max(0, Math.round(payload.bestStreak)));
+    setQuestionStartedAt(Date.now());
+    setSessionStartedAt(elapsedAtSave !== null ? Date.now() - elapsedAtSave : null);
+    setAnsweredCount(Math.max(0, Math.round(payload.answeredCount)));
+    setRoundSummary(null);
+    setShowRoundResult(false);
+    setGamePhase(payload.phase === 'playing' ? 'playing' : 'intro');
+  };
+
   useEffect(() => {
+    if (hasRestoredSessionRef.current) {
+      return;
+    }
+    if (!isMathSession(lastSession)) {
+      return;
+    }
+    if (isSessionExpired(lastSession.updatedAt)) {
+      clearLastSession('math');
+      return;
+    }
+    if (lastSession.level !== currentLevel) {
+      setCurrentGameLevel('math', lastSession.level);
+      return;
+    }
+
+    restoreSession(lastSession.payload, lastSession.updatedAt);
+    hasRestoredSessionRef.current = true;
+  }, [
+    clearLastSession,
+    currentLevel,
+    lastSession,
+    setCurrentGameLevel,
+  ]);
+
+  useEffect(() => {
+    if (
+      !hasRestoredSessionRef.current &&
+      isMathSession(lastSession) &&
+      !isSessionExpired(lastSession.updatedAt) &&
+      lastSession.level === currentLevel
+    ) {
+      return;
+    }
     resetRound(currentLevel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentLevel]);
+  }, [currentLevel, lastSession]);
+
+  useEffect(() => {
+    if (showRoundResult) {
+      return;
+    }
+
+    const hasProgress =
+      gamePhase === 'playing' ||
+      answeredCount > 0 ||
+      roundScore > 0 ||
+      correctCount > 0 ||
+      wrongCount > 0;
+
+    if (!hasProgress) {
+      clearLastSession('math');
+      return;
+    }
+
+    const payload: MathSessionPayload = {
+      currentData,
+      wrongAnswer,
+      streak,
+      bestStreak,
+      roundScore,
+      correctCount,
+      wrongCount,
+      answeredCount,
+      questionStartedAt,
+      sessionStartedAt,
+      phase: gamePhase,
+    };
+
+    saveLastSession({
+      game: 'math',
+      route: '/math-game',
+      level: currentLevel,
+      phase: gamePhase,
+      progressLabel: `Level ${currentLevel} • ${answeredCount}/${roundQuestionCount} solved`,
+      updatedAt: new Date().toISOString(),
+      payload,
+    });
+  }, [
+    answeredCount,
+    bestStreak,
+    clearLastSession,
+    correctCount,
+    currentData,
+    currentLevel,
+    gamePhase,
+    questionStartedAt,
+    roundQuestionCount,
+    roundScore,
+    saveLastSession,
+    sessionStartedAt,
+    showRoundResult,
+    streak,
+    wrongAnswer,
+    wrongCount,
+  ]);
 
   const handleAnswer = (selectedAnswer: number) => {
     if (selectedAnswer === currentData.answer) {
@@ -336,6 +470,7 @@ export const MathGameScreen = () => {
       finishRound('quit');
       return;
     }
+    clearLastSession('math');
     goBack();
   };
 
@@ -482,9 +617,11 @@ export const MathGameScreen = () => {
         summary={roundSummary}
         gameTitle="Math Adventure"
         onPlayAgain={() => {
+          clearLastSession('math');
           resetRound(currentLevel);
         }}
         onPlayNext={() => {
+          clearLastSession('math');
           const nextLevel = roundSummary?.nextLevel ?? null;
           if (nextLevel) {
             setCurrentGameLevel('math', nextLevel);
@@ -493,8 +630,12 @@ export const MathGameScreen = () => {
           }
           resetRound(currentLevel);
         }}
-        onBackHome={goBack}
+        onBackHome={() => {
+          clearLastSession('math');
+          goBack();
+        }}
         onTryRecovery={(suggestedLevel) => {
+          clearLastSession('math');
           activateRecoveryMode('math', suggestedLevel);
           resetRound(suggestedLevel);
         }}

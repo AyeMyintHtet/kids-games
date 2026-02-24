@@ -25,10 +25,12 @@ import { PopBox } from '../src/components/PopBox';
 import { ScoreBadge } from '../src/components/ScoreBadge';
 import { AchievementsPopup } from '../src/components/AchievementsPopup';
 import { ProgressJourneyPopup } from '../src/components/ProgressJourneyPopup';
+import { ParentProgressPopup } from '../src/components/ParentProgressPopup';
 import { Colors } from '../src/constants/colors';
+import { Config } from '../src/constants/config';
 import { Typography } from '../src/constants/typography';
 import { useCloudTransition } from '../src/hooks/useCloudTransition';
-import { useAppStore } from '../src/store/useAppStore';
+import { useAppStore, type SavedSession } from '../src/store/useAppStore';
 import { useMusic } from './_layout'; // keep existing relative import
 
 // Utils
@@ -49,9 +51,11 @@ import { TwinklingSparkle } from '../src/components/home/TwinklingSparkle';
 import { DancingButterfly } from '../src/components/home/DancingButterfly';
 import { MascotOwl } from '../src/components/home/MascotOwl';
 import { AnimatedRainbow } from '../src/components/home/AnimatedRainbow';
+import { SessionFlowCard } from '../src/components/home/SessionFlowCard';
 import {
   AchievementsButton,
   JourneyButton,
+  ParentGateButton,
   SettingsButton,
 } from '../src/components/home/HomeButtons';
 import { WavyDivider } from '../src/components/home/WavyDivider';
@@ -61,6 +65,16 @@ import {
   PROGRESSION_THEMES,
   type MathOperation,
 } from '../src/features/progression/model/progression';
+
+const isSessionExpired = (updatedAt: string): boolean => {
+  const updatedMs = new Date(updatedAt).getTime();
+  if (!Number.isFinite(updatedMs)) return true;
+  return Date.now() - updatedMs > Config.game.sessionTimeout;
+};
+
+const getResumeRoute = (session: SavedSession): '/math-game' | '/alphabet' | '/animal-flashcards' => {
+  return session.route;
+};
 
 /**
  * Main HomeScreen Component.
@@ -81,6 +95,7 @@ export default function HomeScreen() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const [isJourneyOpen, setIsJourneyOpen] = useState(false);
+  const [isParentProgressOpen, setIsParentProgressOpen] = useState(false);
   const language = useAppStore((state) => state.settings.language);
   const unlockedAchievementsCount = useAppStore(
     (state) => state.achievements.unlocked.length
@@ -89,6 +104,8 @@ export default function HomeScreen() {
   const activeThemeId = useAppStore((state) => state.progression.activeThemeId);
   const dailyGoal = useAppStore((state) => state.progression.dailyGoal);
   const streak = useAppStore((state) => state.progression.streak);
+  const lastSession = useAppStore((state) => state.lastSession);
+  const clearLastSession = useAppStore((state) => state.clearLastSession);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const mathOperationPrefs = useAppStore((state) => state.settings.mathOperationPrefs);
   const setMathOperationEnabled = useAppStore((state) => state.setMathOperationEnabled);
@@ -96,6 +113,11 @@ export default function HomeScreen() {
     () => PROGRESSION_THEMES.find((theme) => theme.id === activeThemeId) ?? PROGRESSION_THEMES[0],
     [activeThemeId]
   );
+  const resumableSession = useMemo(() => {
+    if (!lastSession) return null;
+    if (isSessionExpired(lastSession.updatedAt)) return null;
+    return lastSession;
+  }, [lastSession]);
   const isCompact = isSmallHeightDevice;
   const isVeryCompact = isVerySmallHeightDevice;
   const gameButtonSize = isVeryCompact ? scale(98) : isCompact ? scale(108) : scale(120);
@@ -111,6 +133,13 @@ export default function HomeScreen() {
     : isCompact
       ? verticalScale(118)
       : verticalScale(150);
+
+  useEffect(() => {
+    if (!lastSession) return;
+    if (isSessionExpired(lastSession.updatedAt)) {
+      clearLastSession(lastSession.game);
+    }
+  }, [clearLastSession, lastSession]);
 
   // Title Animation
   const titleScale = useSharedValue(1);
@@ -170,6 +199,17 @@ export default function HomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsJourneyOpen(true);
   }, []);
+
+  const handleParentProgressPress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsParentProgressOpen(true);
+  }, []);
+
+  const handleResumePress = useCallback(() => {
+    if (!resumableSession) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigateTo(getResumeRoute(resumableSession));
+  }, [navigateTo, resumableSession]);
 
   const mathOperationOptions: {
     key: MathOperation;
@@ -280,6 +320,7 @@ export default function HomeScreen() {
       <View style={[styles.topControls, { top: topControlsTop }]}>
         <View style={styles.leftControlGroup}>
           <SettingsButton onPress={() => setIsSettingsOpen(true)} />
+          <ParentGateButton onPress={handleParentProgressPress} />
           <JourneyButton onPress={handleJourneyPress} totalStars={totalStars} />
         </View>
         <AchievementsButton
@@ -379,14 +420,15 @@ export default function HomeScreen() {
       <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 10 }]}>
         {/* <SoundButton onPress={handleSoundToggle} isMuted={isMuted} /> */}
         <ScoreBadge />
-        <View style={styles.goalChip}>
-          <Text style={styles.goalChipText}>
-            ⭐ {dailyGoal.earnedStars}/{dailyGoal.targetStars}
-          </Text>
-          <Text style={styles.goalChipText}>
-            🔥 {streak.current} {streak.shieldAvailable ? '🛡️' : ''}
-          </Text>
-        </View>
+        <SessionFlowCard
+          canResume={Boolean(resumableSession)}
+          resumeLabel={resumableSession?.progressLabel ?? ''}
+          onResume={handleResumePress}
+          completedRounds={dailyGoal.completedRounds}
+          targetRounds={dailyGoal.targetRounds}
+          streakDays={streak.current}
+          shieldAvailable={streak.shieldAvailable}
+        />
       </View>
 
       {/* Settings PopBox */}
@@ -498,6 +540,11 @@ export default function HomeScreen() {
           }
         }}
       />
+
+      <ParentProgressPopup
+        visible={isParentProgressOpen}
+        onClose={() => setIsParentProgressOpen(false)}
+      />
     </View>
   );
 }
@@ -565,20 +612,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(16),
     zIndex: 100,
     gap: scale(8),
-  },
-  goalChip: {
-    backgroundColor: 'rgba(255,255,255,0.86)',
-    borderRadius: scale(14),
-    borderWidth: 2,
-    borderColor: Colors.white,
-    paddingHorizontal: scale(10),
-    paddingVertical: verticalScale(6),
-    gap: verticalScale(1),
-  },
-  goalChipText: {
-    fontFamily: Typography.fontFamily.display,
-    fontSize: scale(11),
-    color: Colors.neutral[700],
   },
   mainContent: {
     flex: 1,

@@ -267,7 +267,7 @@ export const ProgressJourneyPopup: React.FC<ProgressJourneyPopupProps> = ({
               <View style={styles.dailyGoalCard}>
                 <Text style={styles.dailyGoalTitle}>🎯 Daily Goal + Streak</Text>
                 <Text style={styles.dailyGoalText}>
-                  {progression.dailyGoal.earnedStars}/{progression.dailyGoal.targetStars} stars today
+                  {progression.dailyGoal.completedRounds}/{progression.dailyGoal.targetRounds} rounds today
                 </Text>
                 <Text style={styles.dailyGoalText}>
                   🔥 Streak {progression.streak.current} days · Best {progression.streak.best}

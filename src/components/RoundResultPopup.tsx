@@ -182,7 +182,7 @@ export const RoundResultPopup: React.FC<RoundResultPopupProps> = ({
 
             <View style={styles.goalRow}>
               <Text style={styles.goalText}>
-                🎯 Daily Goal: {summary.dailyGoal.earnedStars}/{summary.dailyGoal.targetStars} stars
+                🎯 Daily Goal: {summary.dailyGoal.completedRounds}/{summary.dailyGoal.targetRounds} rounds
               </Text>
               <Text style={styles.goalText}>
                 🔥 Streak: {summary.streak.current} {summary.streak.shieldAvailable ? '🛡️' : ''}
@@ -463,4 +463,3 @@ const styles = StyleSheet.create({
     color: Colors.secondary.dark,
   },
 });
-
