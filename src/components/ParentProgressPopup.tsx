@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PopBox } from '@/components/PopBox';
 import { Colors } from '@/constants/colors';
 import { Typography } from '@/constants/typography';
@@ -20,8 +21,15 @@ export const ParentProgressPopup: React.FC<ParentProgressPopupProps> = ({
   onClose,
 }) => {
   const activityLog = useAppStore((state) => state.activityLog);
+  const { height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const report = useMemo(() => buildParentWeeklyReport(activityLog), [activityLog]);
+  const scrollMaxHeight = useMemo(() => {
+    const viewportHeight = windowHeight - insets.top - insets.bottom;
+    const safeCap = viewportHeight * 0.58;
+    return Math.max(verticalScale(260), Math.min(verticalScale(460), safeCap));
+  }, [insets.bottom, insets.top, windowHeight]);
 
   const strongestSkill = useMemo(() => {
     if (report.gameSummaries.length === 0) return null;
@@ -41,10 +49,11 @@ export const ParentProgressPopup: React.FC<ParentProgressPopupProps> = ({
       variant="purple"
     >
       <ScrollView
-        style={styles.scroll}
+        style={[styles.scroll, { maxHeight: scrollMaxHeight }]}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         bounces={false}
+        nestedScrollEnabled
       >
         <Text style={styles.subtitle}>
           Weekly classroom-style snapshot for parents and teachers.
@@ -106,9 +115,7 @@ export const ParentProgressPopup: React.FC<ParentProgressPopupProps> = ({
 };
 
 const styles = StyleSheet.create({
-  scroll: {
-    maxHeight: verticalScale(460),
-  },
+  scroll: {},
   content: {
     gap: verticalScale(8),
     paddingBottom: verticalScale(6),

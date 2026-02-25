@@ -1,12 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Modal,
-  TouchableOpacity,
-  Dimensions,
-  TouchableWithoutFeedback,
+  Pressable,
+  useWindowDimensions,
 } from 'react-native';
 
 import Animated, {
@@ -17,15 +16,59 @@ import Animated, {
   withTiming,
   withDelay,
   Easing,
-  FadeIn,
-  FadeOut,
   ZoomIn,
   ZoomOut,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 
-const { width } = Dimensions.get('window');
+const MAX_MODAL_WIDTH = 400;
+const BACKDROP_HORIZONTAL_PADDING = 20;
+const BACKDROP_VERTICAL_PADDING = 16;
+const CLOSE_BUTTON_HIT_SLOP = {
+  top: 10,
+  bottom: 10,
+  left: 10,
+  right: 10,
+} as const;
+
+type PopBoxVariant = 'blue' | 'green' | 'orange' | 'purple';
+
+const POPBOX_THEMES: Record<
+  PopBoxVariant,
+  {
+    bg: string;
+    border: string;
+    title: string;
+    icon: string;
+  }
+> = {
+  blue: {
+    bg: Colors.secondary[100],
+    border: Colors.secondary[400],
+    title: Colors.secondary[700],
+    icon: '⚙️',
+  },
+  green: {
+    bg: Colors.primary[100],
+    border: Colors.primary[400],
+    title: Colors.primary[700],
+    icon: '🌟',
+  },
+  orange: {
+    bg: Colors.danger[100],
+    border: Colors.danger[400],
+    title: Colors.danger[700],
+    icon: '🧸',
+  },
+  purple: {
+    bg: '#F3E8FF',
+    border: '#A855F7',
+    title: '#7E22CE',
+    icon: '🎨',
+  },
+};
 
 /**
  * Animated sparkle decoration for PopBox corners.
@@ -151,7 +194,7 @@ interface PopBoxProps {
   onClose: () => void;
   title?: string;
   children?: React.ReactNode;
-  variant?: 'blue' | 'green' | 'orange' | 'purple'; // Different themes
+  variant?: PopBoxVariant; // Different themes
   showCloseButton?: boolean;
   dismissible?: boolean;
 }
@@ -177,35 +220,18 @@ export const PopBox: React.FC<PopBoxProps> = ({
   showCloseButton = true,
   dismissible = true,
 }) => {
-  // Theme configuration based on variant
-  const themes = {
-    blue: {
-      bg: Colors.secondary[100],
-      border: Colors.secondary[400],
-      title: Colors.secondary[700],
-      icon: '⚙️',
-    },
-    green: {
-      bg: Colors.primary[100],
-      border: Colors.primary[400],
-      title: Colors.primary[700],
-      icon: '🌟',
-    },
-    orange: {
-      bg: Colors.danger[100],
-      border: Colors.danger[400],
-      title: Colors.danger[700],
-      icon: '🧸',
-    },
-    purple: {
-      bg: '#F3E8FF',
-      border: '#A855F7',
-      title: '#7E22CE',
-      icon: '🎨',
-    },
-  };
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const theme = POPBOX_THEMES[variant];
 
-  const theme = themes[variant];
+  const modalWidth = Math.min(
+    screenWidth - BACKDROP_HORIZONTAL_PADDING * 2,
+    MAX_MODAL_WIDTH
+  );
+  const modalMaxHeight = Math.max(
+    260,
+    screenHeight - insets.top - insets.bottom - BACKDROP_VERTICAL_PADDING * 2
+  );
 
   // Haptic feedback on modal open
   useEffect(() => {
@@ -214,11 +240,11 @@ export const PopBox: React.FC<PopBoxProps> = ({
     }
   }, [visible]);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     if (!dismissible) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onClose();
-  };
+  }, [dismissible, onClose]);
 
   if (!visible) return null;
 
@@ -230,76 +256,89 @@ export const PopBox: React.FC<PopBoxProps> = ({
       onRequestClose={handleClose}
       statusBarTranslucent
     >
-      <TouchableWithoutFeedback onPress={dismissible ? handleClose : undefined}>
+      <Animated.View
+        // entering={FadeIn.duration(50)}
+        // exiting={FadeOut.duration(100)}
+        style={[
+          styles.backdrop,
+          {
+            paddingTop: insets.top + BACKDROP_VERTICAL_PADDING,
+            paddingBottom: insets.bottom + BACKDROP_VERTICAL_PADDING,
+          },
+        ]}
+      >
+        {dismissible && (
+          <Pressable
+            onPress={handleClose}
+            style={styles.backdropDismissArea}
+            accessibilityLabel="Close popup"
+          />
+        )}
+
+        {/* Main PopBox Container */}
         <Animated.View
-          entering={FadeIn.duration(200)}
-          exiting={FadeOut.duration(200)}
-          style={styles.backdrop}
+          entering={ZoomIn.springify().damping(12)}
+          exiting={ZoomOut.duration(200)}
+          style={[
+            styles.container,
+            {
+              backgroundColor: theme.bg,
+              borderColor: theme.border,
+              width: modalWidth,
+              maxHeight: modalMaxHeight,
+            },
+          ]}
         >
-          {/* Main PopBox Container */}
-          <TouchableWithoutFeedback onPress={() => { }}>
-            <Animated.View
-              entering={ZoomIn.springify().damping(12)}
-              exiting={ZoomOut.duration(200)}
-              style={[
-                styles.container,
-                {
-                  backgroundColor: theme.bg,
-                  borderColor: theme.border,
-                },
+          {/* ✨ Corner sparkle decorations — magical whimsy for children */}
+          <SparkleDecor emoji="✨" delay={0} style={{ top: -10, left: -10 }} />
+          <SparkleDecor emoji="⭐" delay={300} style={{ top: -10, right: -10 }} />
+          <SparkleDecor emoji="💫" delay={600} style={{ bottom: -10, left: -10 }} />
+          <SparkleDecor emoji="✨" delay={900} style={{ bottom: -10, right: -10 }} />
+
+          {/* Decorative "Stitch" Border Layer */}
+          <View style={[styles.stitchBorder, { borderColor: theme.border }]} />
+
+          {showCloseButton && (
+            <Pressable
+              onPress={handleClose}
+              style={({ pressed }) => [
+                styles.closeButtonFloating,
+                pressed && styles.closeButtonPressed,
               ]}
+              hitSlop={CLOSE_BUTTON_HIT_SLOP}
             >
-              {/* ✨ Corner sparkle decorations — magical whimsy for children */}
-              <SparkleDecor emoji="✨" delay={0} style={{ top: -10, left: -10 }} />
-              <SparkleDecor emoji="⭐" delay={300} style={{ top: -10, right: -10 }} />
-              <SparkleDecor emoji="💫" delay={600} style={{ bottom: -10, left: -10 }} />
-              <SparkleDecor emoji="✨" delay={900} style={{ bottom: -10, right: -10 }} />
+              <View style={styles.closeButtonInner}>
+                <Text style={styles.closeIcon}>✕</Text>
+              </View>
+            </Pressable>
+          )}
 
-              {/* Decorative "Stitch" Border Layer */}
-              <View style={[styles.stitchBorder, { borderColor: theme.border }]} />
-
-              {/* Header with bouncing dots */}
-              {(title || showCloseButton) && (
-                <View style={styles.header}>
-                  {title && (
-                    <View style={styles.titleContainer}>
-                      <Text style={styles.headerIcon}>{theme.icon}</Text>
-                      <Text style={[styles.title, { color: theme.title }]}>
-                        {title}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Bouncing dots — playful activity indicator between title and close */}
-                  <View style={styles.dotsRow}>
-                    <BouncingDot color={Colors.candy.pink} size={8} delay={0} />
-                    <BouncingDot color={Colors.candy.lemon} size={8} delay={150} />
-                    <BouncingDot color={Colors.candy.mint} size={8} delay={300} />
-                  </View>
-
-                  {showCloseButton && (
-                    <TouchableOpacity
-                      onPress={handleClose}
-                      style={styles.closeButton}
-                      activeOpacity={0.8}
-                    >
-                      <View style={styles.closeButtonInner}>
-                        <Text style={styles.closeIcon}>✕</Text>
-                      </View>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-
-              {/* Content Area */}
-              <View style={styles.content}>
-                {children}
+          {/* Header with bouncing dots */}
+          {title && (
+            <View style={styles.header}>
+              <View style={styles.titleContainer}>
+                <Text style={styles.headerIcon}>{theme.icon}</Text>
+                <Text style={[styles.title, { color: theme.title }]}>
+                  {title}
+                </Text>
               </View>
 
-            </Animated.View>
-          </TouchableWithoutFeedback>
+              {/* Bouncing dots — playful activity indicator between title and close */}
+              <View style={styles.dotsRow}>
+                <BouncingDot color={Colors.candy.pink} size={8} delay={0} />
+                <BouncingDot color={Colors.candy.lemon} size={8} delay={150} />
+                <BouncingDot color={Colors.candy.mint} size={8} delay={300} />
+              </View>
+            </View>
+          )}
+
+          {/* Content Area */}
+          <View style={styles.content}>
+            {children}
+          </View>
+
         </Animated.View>
-      </TouchableWithoutFeedback>
+      </Animated.View>
     </Modal>
   );
 };
@@ -310,10 +349,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: BACKDROP_HORIZONTAL_PADDING,
+  },
+  backdropDismissArea: {
+    ...StyleSheet.absoluteFillObject,
   },
   container: {
-    width: Math.min(width * 0.9, 400),
     borderRadius: 40, // High curvature for playful look
     borderWidth: 0,
     padding: 24,
@@ -334,11 +375,12 @@ const styles = StyleSheet.create({
     pointerEvents: 'none',
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
     paddingHorizontal: 8,
+    minHeight: 44,
+    gap: 8,
     zIndex: 10,
   },
   titleContainer: {
@@ -349,6 +391,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    flexShrink: 1,
+    maxWidth: '100%',
   },
   headerIcon: {
     fontSize: 24,
@@ -358,17 +402,24 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     letterSpacing: 0.5,
+    flexShrink: 1,
   },
   dotsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 8,
   },
-  closeButton: {
+  closeButtonFloating: {
+    position: 'absolute',
+    left: 12,
+    top: 12,
     width: 44,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 30,
+  },
+  closeButtonPressed: {
+    transform: [{ scale: 0.95 }],
   },
   closeButtonInner: {
     width: 40,
@@ -396,6 +447,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
     minHeight: 100,
+    flexShrink: 1,
     width: '100%',
     shadowColor: 'rgba(0,0,0,0.05)',
     shadowOffset: { width: 0, height: 2 },

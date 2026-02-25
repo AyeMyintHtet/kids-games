@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, StatusBar, Platform, ScrollView } from 'react-native';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, Pressable, StatusBar, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { useCloudTransition } from '@/hooks/useCloudTransition';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,12 +35,17 @@ import { getAlphabetLevelConfig } from '@/features/progression/model/progression
 import {
   isSmallHeightDevice,
   isVerySmallHeightDevice,
-  SCREEN_HEIGHT,
   scale,
   verticalScale,
 } from '@/utils/responsive';
 
 const PAUSE_ICON = require('@/assets/images/pause.png');
+const SMALL_PRESSABLE_HIT_SLOP = {
+  top: 8,
+  bottom: 8,
+  left: 8,
+  right: 8,
+} as const;
 
 const AnimatedLetterButton = ({
   letter,
@@ -97,6 +102,7 @@ const AnimatedLetterButton = ({
         onPress={() => onPress(letter)}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        hitSlop={4}
         style={styles.pressableContainer}
       >
         <Animated.View
@@ -134,6 +140,7 @@ const isSessionExpired = (updatedAt: string): boolean => {
 export const AlphabetGameScreen = () => {
   const { replaceTo } = useCloudTransition();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const difficulty = useAppStore((state) => state.settings.difficulty);
   const addScore = useAppStore((state) => state.addScore);
   const recordGameResult = useAppStore((state) => state.recordGameResult);
@@ -167,22 +174,26 @@ export const AlphabetGameScreen = () => {
   const [showRoundResult, setShowRoundResult] = useState(false);
   const resultRecordedRef = useRef(false);
   const hasRestoredSessionRef = useRef(false);
+  const initializedLevelRef = useRef<number | null>(null);
   const isCompact = isSmallHeightDevice;
   const isVeryCompact = isVerySmallHeightDevice;
+  const isNarrow = windowWidth <= 360;
+  const isTablet = windowWidth >= 768;
   const boardMaxHeight = isVeryCompact
-    ? SCREEN_HEIGHT * 0.44
+    ? windowHeight * 0.44
     : isCompact
-      ? SCREEN_HEIGHT * 0.50
-      : SCREEN_HEIGHT * 0.62;
+      ? windowHeight * 0.50
+      : windowHeight * 0.62;
+  const boardAspectRatio = isVeryCompact ? 0.92 : isCompact ? 0.86 : 0.78;
+  const boardWidth = isTablet ? '82%' : isNarrow ? '98%' : isCompact ? '96%' : '92%';
+  const headerHorizontalPadding = isNarrow ? scale(10) : scale(16);
+  const contentHorizontalPadding = isNarrow ? scale(8) : scale(12);
+  const contentBottomPadding = Math.max(insets.bottom + verticalScale(16), verticalScale(20));
   const titleSize = isVeryCompact ? scale(18) : isCompact ? scale(20) : scale(22);
   const timerSize = isVeryCompact ? scale(18) : isCompact ? scale(20) : scale(24);
   const progressSize = isVeryCompact ? scale(24) : isCompact ? scale(28) : scale(34);
   const progressSubSize = isVeryCompact ? scale(14) : isCompact ? scale(16) : scale(20);
-  const headerIconSize = isVeryCompact ? scale(42) : scale(50);
-  const footerBottom = Math.max(
-    isCompact ? verticalScale(16) : 40,
-    insets.bottom + (isCompact ? verticalScale(6) : 12)
-  );
+  const headerIconSize = Math.max(isVeryCompact ? scale(42) : scale(50), 44);
 
   // Pick 3 unique random candy colors on mount for Timer / TapNext / Correct texts
   const [timerColor, tapNextColor, correctColor] = useMemo(() => {
@@ -238,7 +249,7 @@ export const AlphabetGameScreen = () => {
     );
   };
 
-  const recordAlphabetResult = (
+  const recordAlphabetResult = useCallback((
     score: number,
     timeMs: number | null,
     correct: number,
@@ -258,7 +269,7 @@ export const AlphabetGameScreen = () => {
       hintsUsed: wrong > 0,
       outcome,
     });
-  };
+  }, [currentLevel, recordGameResult]);
 
   const restoreSession = (payload: AlphabetSessionPayload, updatedAt: string) => {
     const updatedMs = new Date(updatedAt).getTime();
@@ -303,9 +314,10 @@ export const AlphabetGameScreen = () => {
 
     restoreSession(lastSession.payload, lastSession.updatedAt);
     hasRestoredSessionRef.current = true;
+    initializedLevelRef.current = currentLevel;
   }, [clearLastSession, currentLevel, lastSession, setCurrentGameLevel]);
 
-  const handleLetterPress = (letter: string) => {
+  const handleLetterPress = useCallback((letter: string) => {
     if (gamePhase !== 'playing' || isRoundComplete || correctLetters.has(letter)) {
       return;
     }
@@ -379,17 +391,35 @@ export const AlphabetGameScreen = () => {
       ...prev,
       [letter]: (prev[letter] ?? 0) + 1,
     }));
-  };
+  }, [
+    addScore,
+    bestStreak,
+    correctLetters,
+    difficulty,
+    expectedLetter,
+    gamePhase,
+    isRoundComplete,
+    letterStartedAt,
+    nextLetterIndex,
+    recordAlphabetResult,
+    roundScore,
+    roundStartedAt,
+    setRoundSummary,
+    setShowRoundResult,
+    streak,
+    targetAlphabet.length,
+    wrongCount,
+  ]);
 
-  const openGiveUpModal = () => {
+  const openGiveUpModal = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setShowGiveUpModal(true);
-  };
+  }, []);
 
-  const handleCancelGiveUp = () => {
+  const handleCancelGiveUp = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowGiveUpModal(false);
-  };
+  }, []);
 
   const handleConfirmGiveUp = () => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -419,7 +449,7 @@ export const AlphabetGameScreen = () => {
    * Callback from GameCountdown when 3..2..1 finishes.
    * Starts the playing phase, timer, and board pop-in animation.
    */
-  const handleCountdownComplete = () => {
+  const handleCountdownComplete = useCallback(() => {
     const now = Date.now();
     setGamePhase('playing');
     setRoundStartedAt(now);
@@ -432,7 +462,7 @@ export const AlphabetGameScreen = () => {
       withTiming(0.8, { duration: 0 }),
       withSpring(1, { damping: 12, stiffness: 100 })
     );
-  };
+  }, [boardScale]);
 
   // Gentle pulse animation on the pause button so kids notice it
   useEffect(() => {
@@ -459,6 +489,20 @@ export const AlphabetGameScreen = () => {
   }, [gamePhase, isRoundComplete, roundStartedAt]);
 
   useEffect(() => {
+    if (initializedLevelRef.current === currentLevel) {
+      return;
+    }
+
+    const shouldWaitForSavedLevel =
+      !hasRestoredSessionRef.current &&
+      isAlphabetSession(lastSession) &&
+      !isSessionExpired(lastSession.updatedAt) &&
+      lastSession.level !== currentLevel;
+
+    if (shouldWaitForSavedLevel) {
+      return;
+    }
+
     if (
       !hasRestoredSessionRef.current &&
       isAlphabetSession(lastSession) &&
@@ -468,6 +512,7 @@ export const AlphabetGameScreen = () => {
       return;
     }
     startNewRound(currentLevel);
+    initializedLevelRef.current = currentLevel;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentLevel, lastSession]);
 
@@ -546,9 +591,9 @@ export const AlphabetGameScreen = () => {
 
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingHorizontal: headerHorizontalPadding }]}>
           {/* Top-left pause button */}
-          <Pressable onPress={openGiveUpModal} >
+          <Pressable onPress={openGiveUpModal} hitSlop={SMALL_PRESSABLE_HIT_SLOP}>
             <Animated.View
               style={[
                 styles.pauseButton,
@@ -567,12 +612,12 @@ export const AlphabetGameScreen = () => {
             </Animated.View>
           </Pressable>
 
-          <View style={styles.titleContainer}>
+          <View style={[styles.titleContainer, isNarrow && styles.titleContainerNarrow]}>
             <Text style={[styles.title, { fontSize: titleSize }]}>Alphabet Fun</Text>
           </View>
           <View style={[styles.headerSpacer, { width: headerIconSize, height: headerIconSize }]} />
         </View>
-        <View style={styles.scoreRow}>
+        <View style={[styles.scoreRow, { paddingHorizontal: headerHorizontalPadding }]}>
           <ScoreBadge game="alphabet" />
         </View>
         {gamePhase === 'playing' && (
@@ -586,10 +631,14 @@ export const AlphabetGameScreen = () => {
           contentContainerStyle={[
             styles.contentScroll,
             isCompact && styles.contentScrollCompact,
+            {
+              paddingHorizontal: contentHorizontalPadding,
+              paddingBottom: contentBottomPadding,
+            },
           ]}
           showsVerticalScrollIndicator={false}
           bounces={false}
-          scrollEnabled={isCompact}
+          scrollEnabled
         >
 
           {gamePhase !== 'playing' && (
@@ -620,7 +669,8 @@ export const AlphabetGameScreen = () => {
                   styles.boardContainer,
                   {
                     maxHeight: boardMaxHeight,
-                    width: isCompact ? '96%' : '92%',
+                    width: boardWidth,
+                    aspectRatio: boardAspectRatio,
                   },
                   boardAnimatedStyle,
                 ]}
@@ -631,7 +681,14 @@ export const AlphabetGameScreen = () => {
                   contentFit="fill"
                 /> */}
 
-                <View pointerEvents="box-none" style={styles.boardOverlay}>
+                <View
+                  pointerEvents="box-none"
+                  style={[
+                    styles.boardOverlay,
+                    isCompact && styles.boardOverlayCompact,
+                    isNarrow && styles.boardOverlayNarrow,
+                  ]}
+                >
                   {/* Grid Overlay */}
                   <View style={styles.lettersGrid}>
                     {shuffledLetters.map((letter, index) => (
@@ -650,7 +707,7 @@ export const AlphabetGameScreen = () => {
               </Animated.View>
 
               {/* Extra bottom padding accounts for Android software nav buttons */}
-              <View style={[styles.footer, { bottom: footerBottom }]}>
+              <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, verticalScale(8)) }]}>
                 {isRoundComplete && (
                   <TactileButton
                     onPress={startNewRound}
@@ -720,8 +777,8 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     flexDirection: 'column',
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
   },
   header: {
     flexDirection: 'row',
@@ -738,7 +795,6 @@ const styles = StyleSheet.create({
   scoreRow: {
     width: '100%',
     alignItems: 'flex-end',
-    paddingHorizontal: 16,
     marginTop: 8,
   },
   pauseButton: {
@@ -760,7 +816,11 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: Colors.secondary.main,
     elevation: 4,
-    marginLeft: -30,
+    maxWidth: '70%',
+  },
+  titleContainerNarrow: {
+    maxWidth: '64%',
+    paddingHorizontal: 14,
   },
   title: {
     fontFamily: 'SuperWonder',
@@ -784,10 +844,9 @@ const styles = StyleSheet.create({
   contentScroll: {
     flexGrow: 1,
     alignItems: 'center',
-    paddingBottom: verticalScale(20),
   },
   contentScrollCompact: {
-    paddingBottom: verticalScale(10),
+    paddingBottom: verticalScale(14),
   },
   boardContainer: {
     width: '92%',
@@ -810,6 +869,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  boardOverlayCompact: {
+    left: '7%',
+    right: '7%',
+    top: '9%',
+    bottom: '11%',
+  },
+  boardOverlayNarrow: {
+    left: '5%',
+    right: '5%',
+    top: '8%',
+    bottom: '10%',
+  },
   lettersGrid: {
     width: '100%',
     height: '100%',
@@ -822,7 +893,7 @@ const styles = StyleSheet.create({
     width: Platform.OS === 'web' ? '18%' : '19%',
     aspectRatio: 1,
     marginHorizontal: '0.5%',
-    marginVertical: 6,
+    marginVertical: verticalScale(4),
   },
   pressableContainer: {
     flex: 1,
@@ -861,18 +932,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.4)',
   },
   footer: {
-    position: 'absolute',
-    // bottom is set dynamically via insets.bottom in the component
-    left: 0,
-    right: 0,
+    width: '100%',
+    marginTop: verticalScale(12),
     alignItems: 'center',
   },
   // placeholderText + countdownText styles moved to shared GameCountdown component
   progressContainer: {
-    marginTop: 44,
-    marginBottom: 14,
+    marginTop: verticalScale(24),
+    marginBottom: verticalScale(12),
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: scale(16),
   },
   progressContainerCompact: {
     marginTop: verticalScale(16),

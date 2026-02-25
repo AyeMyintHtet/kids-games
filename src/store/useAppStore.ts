@@ -61,11 +61,16 @@ interface PerGameStats {
   bestStreak: number;
 }
 
+interface WeeklyScoreResetState {
+  lastFridayResetDateKey: string | null;
+}
+
 interface GameProgress {
   totalScore: number;
   gamesPlayed: number;
   lastPlayedAt: string | null;
   gameStats: Record<GameKey, PerGameStats>;
+  weeklyScoreReset: WeeklyScoreResetState;
 }
 
 interface AchievementState {
@@ -308,11 +313,7 @@ interface AppState {
   }) => RoundSummary;
   setCurrentGameLevel: (game: GameKey, level: number) => void;
   activateRecoveryMode: (game: GameKey, preferredLevel?: number | null) => void;
-  setDailyGoalTarget: (targetRounds: number) => void;
   clearLastUnlockedAchievement: () => void;
-  clearLastMilestone: () => void;
-  incrementScore: (points: number) => void;
-  recordGamePlayed: () => void;
   resetProgress: () => void;
 }
 
@@ -373,6 +374,9 @@ const initialProgress: GameProgress = {
   gamesPlayed: 0,
   lastPlayedAt: null,
   gameStats: createInitialGameStats(),
+  weeklyScoreReset: {
+    lastFridayResetDateKey: null,
+  },
 };
 
 const initialAchievements: AchievementState = {
@@ -596,6 +600,43 @@ const resetDailyGoalIfNeeded = (
     ),
     completedRounds: 0,
     completed: false,
+  };
+};
+
+const isFridayDateKey = (dateKey: string): boolean => {
+  const date = new Date(`${dateKey}T00:00:00`);
+  return Number.isFinite(date.getTime()) && date.getDay() === 5;
+};
+
+const resetTotalScoreIfFriday = (
+  progress: GameProgress,
+  dateKey: string
+): GameProgress => {
+  if (!isFridayDateKey(dateKey)) {
+    return progress;
+  }
+  if (progress.weeklyScoreReset.lastFridayResetDateKey === dateKey) {
+    return progress;
+  }
+  return {
+    ...progress,
+    totalScore: 0,
+    weeklyScoreReset: {
+      lastFridayResetDateKey: dateKey,
+    },
+  };
+};
+
+const sanitizeWeeklyScoreReset = (input: unknown): WeeklyScoreResetState => {
+  if (!input || typeof input !== 'object') {
+    return initialProgress.weeklyScoreReset;
+  }
+  const candidate = input as Partial<WeeklyScoreResetState>;
+  return {
+    lastFridayResetDateKey:
+      typeof candidate.lastFridayResetDateKey === 'string'
+        ? candidate.lastFridayResetDateKey
+        : null,
   };
 };
 
@@ -921,14 +962,16 @@ export const useAppStore = create<AppState>()(
         set((state) => {
           const safePoints = Math.max(0, Math.round(points));
           if (safePoints === 0) return state;
+          const dateKey = getDateKey();
+          const progressWithFridayReset = resetTotalScoreIfFriday(state.progress, dateKey);
           const previousGameStats =
-            state.progress.gameStats[game] ?? initialProgress.gameStats[game];
+            progressWithFridayReset.gameStats[game] ?? initialProgress.gameStats[game];
           return {
             progress: {
-              ...state.progress,
-              totalScore: state.progress.totalScore + safePoints,
+              ...progressWithFridayReset,
+              totalScore: progressWithFridayReset.totalScore + safePoints,
               gameStats: {
-                ...state.progress.gameStats,
+                ...progressWithFridayReset.gameStats,
                 [game]: {
                   ...previousGameStats,
                   lastScore: previousGameStats.lastScore + safePoints,
@@ -1298,48 +1341,12 @@ export const useAppStore = create<AppState>()(
             },
           };
         }),
-      setDailyGoalTarget: (targetRounds) =>
-        set((state) => {
-          const safeTarget = Math.max(1, Math.round(targetRounds));
-          return {
-            progression: {
-              ...state.progression,
-              dailyGoal: {
-                ...state.progression.dailyGoal,
-                targetRounds: safeTarget,
-                completed: state.progression.dailyGoal.completedRounds >= safeTarget,
-              },
-            },
-          };
-        }),
       clearLastUnlockedAchievement: () =>
         set((state) => ({
           achievements: {
             ...state.achievements,
             lastUnlockedId: null,
             lastUnlockedAt: null,
-          },
-        })),
-      clearLastMilestone: () =>
-        set((state) => ({
-          progression: {
-            ...state.progression,
-            lastMilestoneId: null,
-          },
-        })),
-      incrementScore: (points) =>
-        set((state) => ({
-          progress: {
-            ...state.progress,
-            totalScore: state.progress.totalScore + Math.max(0, Math.round(points)),
-          },
-        })),
-      recordGamePlayed: () =>
-        set((state) => ({
-          progress: {
-            ...state.progress,
-            gamesPlayed: state.progress.gamesPlayed + 1,
-            lastPlayedAt: new Date().toISOString(),
           },
         })),
       resetProgress: () =>
@@ -1360,6 +1367,9 @@ export const useAppStore = create<AppState>()(
         const persistedProgress: Partial<GameProgress> = persisted.progress ?? {};
         const persistedGameStats: Partial<Record<GameKey, Partial<PerGameStats>>> =
           persistedProgress.gameStats ?? {};
+        const persistedWeeklyScoreReset = sanitizeWeeklyScoreReset(
+          (persistedProgress as { weeklyScoreReset?: unknown }).weeklyScoreReset
+        );
         const mergedProgress: GameProgress = {
           ...currentState.progress,
           ...persistedProgress,
@@ -1377,7 +1387,12 @@ export const useAppStore = create<AppState>()(
               ...(persistedGameStats.animals ?? {}),
             },
           },
+          weeklyScoreReset: persistedWeeklyScoreReset,
         };
+        const mergedProgressAfterFridayReset = resetTotalScoreIfFriday(
+          mergedProgress,
+          getDateKey()
+        );
 
         const persistedAchievements: Partial<AchievementState> =
           persisted.achievements ?? {};
@@ -1479,7 +1494,7 @@ export const useAppStore = create<AppState>()(
             },
           },
           profile: mergedProfile,
-          progress: mergedProgress,
+          progress: mergedProgressAfterFridayReset,
           progression: finalProgression,
           achievements: {
             ...currentState.achievements,

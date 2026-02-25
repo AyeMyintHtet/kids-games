@@ -6,6 +6,7 @@ import {
   StatusBar,
   TouchableOpacity,
   Switch,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,8 +41,6 @@ import {
   isVerySmallHeightDevice,
   scale,
   verticalScale,
-  SCREEN_WIDTH,
-  SCREEN_HEIGHT,
 } from '../src/utils/responsive';
 
 // Home Feature Components
@@ -92,6 +91,7 @@ const getResumeRoute = (session: SavedSession): '/math-game' | '/alphabet' | '/a
 export default function HomeScreen() {
   const { navigateTo } = useCloudTransition();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { isMuted, toggleMute } = useMusic();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
@@ -235,12 +235,12 @@ export default function HomeScreen() {
 
   // Bubble configurations — candy colors floating upward
   const bubbles = [
-    { color: Colors.candy.pink, size: 30, startX: SCREEN_WIDTH * 0.1, delay: 0, duration: 8000 },
-    { color: Colors.candy.lavender, size: 22, startX: SCREEN_WIDTH * 0.3, delay: 2000, duration: 10000 },
-    { color: Colors.candy.mint, size: 35, startX: SCREEN_WIDTH * 0.55, delay: 4000, duration: 9000 },
-    { color: Colors.candy.lemon, size: 18, startX: SCREEN_WIDTH * 0.75, delay: 1000, duration: 11000 },
-    { color: Colors.candy.skyBlue, size: 26, startX: SCREEN_WIDTH * 0.9, delay: 3000, duration: 7000 },
-    { color: Colors.candy.peach, size: 20, startX: SCREEN_WIDTH * 0.45, delay: 5000, duration: 12000 },
+    { color: Colors.candy.pink, size: 30, startX: windowWidth * 0.1, delay: 0, duration: 8000 },
+    { color: Colors.candy.lavender, size: 22, startX: windowWidth * 0.3, delay: 2000, duration: 10000 },
+    { color: Colors.candy.mint, size: 35, startX: windowWidth * 0.55, delay: 4000, duration: 9000 },
+    { color: Colors.candy.lemon, size: 18, startX: windowWidth * 0.75, delay: 1000, duration: 11000 },
+    { color: Colors.candy.skyBlue, size: 26, startX: windowWidth * 0.9, delay: 3000, duration: 7000 },
+    { color: Colors.candy.peach, size: 20, startX: windowWidth * 0.45, delay: 5000, duration: 12000 },
   ];
 
   return (
@@ -250,7 +250,7 @@ export default function HomeScreen() {
       {/* Sky gradient background */}
       <LinearGradient
         colors={[...activeTheme.skyGradient]}
-        style={styles.backgroundGradient}
+        style={[styles.backgroundGradient, { height: windowHeight * 0.7 }]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
       />
@@ -258,7 +258,7 @@ export default function HomeScreen() {
       {/* Grass at bottom */}
       <LinearGradient
         colors={[...activeTheme.grassGradient]}
-        style={styles.grass}
+        style={[styles.grass, { height: windowHeight * 0.35 }]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
       />
@@ -485,6 +485,7 @@ export default function HomeScreen() {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     setMathOperationEnabled(option.key, !enabled);
                   }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   activeOpacity={0.85}
                   style={[
                     styles.mathOpChip,
@@ -580,24 +581,23 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    height: SCREEN_HEIGHT * 0.7,
   },
   grass: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: SCREEN_HEIGHT * 0.35,
     borderTopLeftRadius: scale(100),
     borderTopRightRadius: scale(100),
   },
   tree: {
     position: 'absolute',
     fontSize: scale(80),
-    bottom: verticalScale(200),
+    bottom: verticalScale(250),
   },
   treeLeft: {
     left: -scale(15),
+
   },
   treeRight: {
     right: -scale(15),
@@ -767,6 +767,7 @@ const styles = StyleSheet.create({
   },
   mathOpChip: {
     minWidth: scale(70),
+    minHeight: verticalScale(44),
     borderRadius: scale(14),
     borderWidth: 2,
     paddingHorizontal: scale(10),

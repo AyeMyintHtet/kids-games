@@ -6,8 +6,9 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   Easing,
@@ -40,8 +41,6 @@ import {
 import {
   isSmallHeightDevice,
   isVerySmallHeightDevice,
-  SCREEN_HEIGHT,
-  SCREEN_WIDTH,
   scale,
   verticalScale,
 } from '@/utils/responsive';
@@ -64,6 +63,12 @@ const CORRECT_SOUND = require('@/assets/sounds/correct.mp3');
 const WRONG_SOUND = require('@/assets/sounds/wrong.mp3');
 const WIN_SOUND = require('@/assets/sounds/bravo.mp3');
 const LOSS_SOUND = require('@/assets/sounds/wrong.mp3');
+const SMALL_PRESSABLE_HIT_SLOP = {
+  top: 8,
+  bottom: 8,
+  left: 8,
+  right: 8,
+} as const;
 
 type AquariumBubbleProps = {
   left: number;
@@ -217,6 +222,8 @@ const MemoryCard = ({ card, disabled, onPress, cardWidth, cardHeight }: MemoryCa
 
 export const AnimalFlashcardsScreen = () => {
   const { goBack } = useCloudTransition();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const addScore = useAppStore((state) => state.addScore);
   const recordGameResult = useAppStore((state) => state.recordGameResult);
   const currentLevel = useAppStore((state) => state.progression.games.animals.currentLevel);
@@ -231,11 +238,16 @@ export const AnimalFlashcardsScreen = () => {
   const difficultyBand = activeLevel.band as Level;
   const isCompact = isSmallHeightDevice;
   const isVeryCompact = isVerySmallHeightDevice;
+  const isNarrow = windowWidth <= 360;
+  const isTablet = windowWidth >= 768;
   const boardHeight = isVeryCompact
-    ? SCREEN_HEIGHT * 0.36
+    ? windowHeight * 0.34
     : isCompact
-      ? SCREEN_HEIGHT * 0.43
-      : verticalScale(410);
+      ? windowHeight * 0.42
+      : Math.max(verticalScale(410), windowHeight * 0.46);
+  const backButtonSize = Math.max(scale(isVeryCompact ? 42 : 46), 44);
+  const horizontalPadding = isNarrow ? scale(8) : isTablet ? scale(14) : scale(10);
+  const scrollBottomPadding = Math.max(insets.bottom + verticalScale(14), verticalScale(18));
   const [phase, setPhase] = useState<GamePhase>('intro');
   const [cards, setCards] = useState<AnimalCard[]>(() =>
     buildDeck(difficultyBand, activeLevel.pairs)
@@ -262,8 +274,9 @@ export const AnimalFlashcardsScreen = () => {
   const roundScoreRef = useRef(0);
   const bestStreakRef = useRef(0);
   const hasRestoredSessionRef = useRef(false);
+  const initializedLevelRef = useRef<number | null>(null);
   const [boardLayout, setBoardLayout] = useState({
-    width: SCREEN_WIDTH - scale(20),
+    width: windowWidth - horizontalPadding * 2,
     height: boardHeight,
   });
 
@@ -312,15 +325,53 @@ export const AnimalFlashcardsScreen = () => {
 
   const bubbleConfig = useMemo(
     () => [
-      { left: scale(20), top: verticalScale(150), size: scale(16), delay: 0, duration: 1600 },
-      { left: scale(65), top: verticalScale(240), size: scale(12), delay: 700, duration: 1800 },
-      { left: scale(285), top: verticalScale(170), size: scale(18), delay: 400, duration: 2000 },
-      { left: scale(325), top: verticalScale(280), size: scale(14), delay: 1200, duration: 2100 },
-      { left: scale(130), top: verticalScale(110), size: scale(10), delay: 900, duration: 1900 },
+      {
+        left: windowWidth * 0.06,
+        top: windowHeight * 0.2,
+        size: scale(16),
+        delay: 0,
+        duration: 1600,
+      },
+      {
+        left: windowWidth * 0.18,
+        top: windowHeight * 0.32,
+        size: scale(12),
+        delay: 700,
+        duration: 1800,
+      },
+      {
+        left: windowWidth * 0.74,
+        top: windowHeight * 0.22,
+        size: scale(18),
+        delay: 400,
+        duration: 2000,
+      },
+      {
+        left: windowWidth * 0.84,
+        top: windowHeight * 0.36,
+        size: scale(14),
+        delay: 1200,
+        duration: 2100,
+      },
+      {
+        left: windowWidth * 0.34,
+        top: windowHeight * 0.14,
+        size: scale(10),
+        delay: 900,
+        duration: 1900,
+      },
     ],
-    []
+    [windowHeight, windowWidth]
   );
   const activeBubbles = isVeryCompact ? bubbleConfig.slice(0, 3) : bubbleConfig;
+
+  useEffect(() => {
+    setBoardLayout((previous) => ({
+      ...previous,
+      width: Math.max(0, windowWidth - horizontalPadding * 2),
+      height: boardHeight,
+    }));
+  }, [boardHeight, horizontalPadding, windowWidth]);
 
   const addRoundScore = useCallback(
     (points: number) => {
@@ -555,6 +606,7 @@ export const AnimalFlashcardsScreen = () => {
 
     restoreSession(lastSession.payload);
     hasRestoredSessionRef.current = true;
+    initializedLevelRef.current = currentLevel;
   }, [
     clearLastSession,
     currentLevel,
@@ -564,6 +616,20 @@ export const AnimalFlashcardsScreen = () => {
   ]);
 
   useEffect(() => {
+    if (initializedLevelRef.current === currentLevel) {
+      return;
+    }
+
+    const shouldWaitForSavedLevel =
+      !hasRestoredSessionRef.current &&
+      isAnimalSession(lastSession) &&
+      !isSessionExpired(lastSession.updatedAt) &&
+      lastSession.level !== currentLevel;
+
+    if (shouldWaitForSavedLevel) {
+      return;
+    }
+
     if (
       !hasRestoredSessionRef.current &&
       isAnimalSession(lastSession) &&
@@ -573,6 +639,7 @@ export const AnimalFlashcardsScreen = () => {
       return;
     }
     startNewGame(currentLevel);
+    initializedLevelRef.current = currentLevel;
   }, [currentLevel, lastSession, startNewGame]);
 
   useEffect(() => {
@@ -807,20 +874,34 @@ export const AnimalFlashcardsScreen = () => {
           contentContainerStyle={[
             styles.scrollContent,
             isCompact && styles.scrollContentCompact,
+            {
+              paddingHorizontal: horizontalPadding,
+              paddingBottom: scrollBottomPadding,
+            },
           ]}
           showsVerticalScrollIndicator={false}
           bounces={false}
-          scrollEnabled={isCompact}
+          scrollEnabled
         >
           <View style={styles.headerRow}>
             <Pressable
-              style={styles.backButton}
+              style={[
+                styles.backButton,
+                {
+                  width: backButtonSize,
+                  height: backButtonSize,
+                  borderRadius: backButtonSize / 2,
+                },
+              ]}
               onPress={() => {
                 clearLastSession('animals');
                 goBack();
               }}
+              hitSlop={SMALL_PRESSABLE_HIT_SLOP}
             >
-              <Text style={styles.backButtonText}>◀</Text>
+              <Text style={[styles.backButtonText, { fontSize: Math.max(scale(18), backButtonSize * 0.45) }]}>
+                ◀
+              </Text>
             </Pressable>
 
             <View style={styles.titleChip}>
@@ -834,7 +915,13 @@ export const AnimalFlashcardsScreen = () => {
             <ScoreBadge game="animals" />
           </View>
 
-          <View style={[styles.levelRow, isCompact && styles.levelRowCompact]}>
+          <View
+            style={[
+              styles.levelRow,
+              isCompact && styles.levelRowCompact,
+              isNarrow && styles.levelRowNarrow,
+            ]}
+          >
             <View style={styles.levelBadge}>
               <Text style={styles.levelBadgeText}>
                 Level {currentLevel}/{20}
@@ -852,20 +939,20 @@ export const AnimalFlashcardsScreen = () => {
             </View>
           </View>
 
-          <View style={[styles.infoRow, isCompact && styles.infoRowCompact]}>
-            <View style={styles.infoBadge}>
+          <View style={[styles.infoRow, isCompact && styles.infoRowCompact, isNarrow && styles.infoRowNarrow]}>
+            <View style={[styles.infoBadge, isNarrow && styles.infoBadgeNarrow]}>
               <Text style={styles.infoLabel}>Moves</Text>
               <Text style={styles.infoValue}>{moves}</Text>
             </View>
-            <View style={styles.infoBadge}>
+            <View style={[styles.infoBadge, isNarrow && styles.infoBadgeNarrow]}>
               <Text style={styles.infoLabel}>Pairs</Text>
               <Text style={styles.infoValue}>{matchedPairs}/{totalPairs}</Text>
             </View>
-            <View style={styles.infoBadge}>
+            <View style={[styles.infoBadge, isNarrow && styles.infoBadgeNarrow]}>
               <Text style={styles.infoLabel}>Lives</Text>
               <Text style={styles.infoValue}>{lives > 0 ? '❤️'.repeat(lives) : '0'}</Text>
             </View>
-            <View style={styles.infoBadge}>
+            <View style={[styles.infoBadge, isNarrow && styles.infoBadgeNarrow]}>
               <Text style={styles.infoLabel}>Time</Text>
               <Text style={[styles.infoValue, remainingTime <= 10 && styles.infoValueDanger]}>
                 {remainingTime}s
@@ -940,6 +1027,7 @@ export const AnimalFlashcardsScreen = () => {
                 clearLastSession('animals');
                 startNewGame();
               }}
+              hitSlop={SMALL_PRESSABLE_HIT_SLOP}
             >
               <Text style={styles.restartButtonText}>Restart</Text>
             </Pressable>
@@ -985,7 +1073,6 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: scale(10),
   },
   scroll: {
     flex: 1,
@@ -1039,6 +1126,9 @@ const styles = StyleSheet.create({
     marginTop: verticalScale(8),
     gap: scale(6),
   },
+  levelRowNarrow: {
+    gap: scale(5),
+  },
   levelBadge: {
     flex: 1,
     minHeight: verticalScale(36),
@@ -1079,9 +1169,9 @@ const styles = StyleSheet.create({
     color: '#A26100',
   },
   backButton: {
-    width: scale(42),
-    height: scale(42),
-    borderRadius: scale(21),
+    width: scale(44),
+    height: scale(44),
+    borderRadius: scale(22),
     backgroundColor: '#5CB7FF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1122,6 +1212,10 @@ const styles = StyleSheet.create({
     marginTop: verticalScale(8),
     gap: scale(6),
   },
+  infoRowNarrow: {
+    flexWrap: 'wrap',
+    rowGap: verticalScale(6),
+  },
   infoBadge: {
     flex: 1,
     borderRadius: scale(16),
@@ -1130,6 +1224,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.45)',
     alignItems: 'center',
+  },
+  infoBadgeNarrow: {
+    flexBasis: '48%',
+    flexGrow: 0,
   },
   infoLabel: {
     fontFamily: Typography.fontFamily.display,
