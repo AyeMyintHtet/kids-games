@@ -2,6 +2,7 @@ export type ProgressionGameKey = 'math' | 'alphabet' | 'animals';
 
 export const MAX_GAME_LEVEL = 20;
 export const DAILY_STAR_GOAL_DEFAULT = 6;
+export const DAILY_ROUND_GOAL_DEFAULT = 3;
 
 type LevelBand = 'easy' | 'medium' | 'hard';
 export type RoundOutcome = 'won' | 'lost' | 'quit';
@@ -280,6 +281,13 @@ export const isNextDay = (previousDateKey: string, currentDateKey: string): bool
   const current = new Date(`${currentDateKey}T00:00:00`);
   const diffMs = current.getTime() - previous.getTime();
   return diffMs === 24 * 60 * 60 * 1000;
+};
+
+export const getDayDifference = (previousDateKey: string, currentDateKey: string): number => {
+  const previous = new Date(`${previousDateKey}T00:00:00`);
+  const current = new Date(`${currentDateKey}T00:00:00`);
+  const diffMs = current.getTime() - previous.getTime();
+  return Math.round(diffMs / (24 * 60 * 60 * 1000));
 };
 
 export const getUnlockProgressRatio = (

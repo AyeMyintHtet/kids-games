@@ -6,6 +6,7 @@ import {
   StatusBar,
   TouchableOpacity,
   Switch,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,10 +26,13 @@ import { PopBox } from '../src/components/PopBox';
 import { ScoreBadge } from '../src/components/ScoreBadge';
 import { AchievementsPopup } from '../src/components/AchievementsPopup';
 import { ProgressJourneyPopup } from '../src/components/ProgressJourneyPopup';
+import { ParentProgressPopup } from '../src/components/ParentProgressPopup';
+import { ProfileOnboardingPopup } from '../src/components/ProfileOnboardingPopup';
 import { Colors } from '../src/constants/colors';
+import { Config } from '../src/constants/config';
 import { Typography } from '../src/constants/typography';
 import { useCloudTransition } from '../src/hooks/useCloudTransition';
-import { useAppStore } from '../src/store/useAppStore';
+import { useAppStore, type SavedSession } from '../src/store/useAppStore';
 import { useMusic } from './_layout'; // keep existing relative import
 
 // Utils
@@ -37,8 +41,6 @@ import {
   isVerySmallHeightDevice,
   scale,
   verticalScale,
-  SCREEN_WIDTH,
-  SCREEN_HEIGHT,
 } from '../src/utils/responsive';
 
 // Home Feature Components
@@ -49,9 +51,11 @@ import { TwinklingSparkle } from '../src/components/home/TwinklingSparkle';
 import { DancingButterfly } from '../src/components/home/DancingButterfly';
 import { MascotOwl } from '../src/components/home/MascotOwl';
 import { AnimatedRainbow } from '../src/components/home/AnimatedRainbow';
+import { SessionFlowCard } from '../src/components/home/SessionFlowCard';
 import {
   AchievementsButton,
   JourneyButton,
+  ParentGateButton,
   SettingsButton,
 } from '../src/components/home/HomeButtons';
 import { WavyDivider } from '../src/components/home/WavyDivider';
@@ -61,6 +65,16 @@ import {
   PROGRESSION_THEMES,
   type MathOperation,
 } from '../src/features/progression/model/progression';
+
+const isSessionExpired = (updatedAt: string): boolean => {
+  const updatedMs = new Date(updatedAt).getTime();
+  if (!Number.isFinite(updatedMs)) return true;
+  return Date.now() - updatedMs > Config.game.sessionTimeout;
+};
+
+const getResumeRoute = (session: SavedSession): '/math-game' | '/alphabet' | '/animal-flashcards' => {
+  return session.route;
+};
 
 /**
  * Main HomeScreen Component.
@@ -77,10 +91,12 @@ import {
 export default function HomeScreen() {
   const { navigateTo } = useCloudTransition();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { isMuted, toggleMute } = useMusic();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const [isJourneyOpen, setIsJourneyOpen] = useState(false);
+  const [isParentProgressOpen, setIsParentProgressOpen] = useState(false);
   const language = useAppStore((state) => state.settings.language);
   const unlockedAchievementsCount = useAppStore(
     (state) => state.achievements.unlocked.length
@@ -89,6 +105,10 @@ export default function HomeScreen() {
   const activeThemeId = useAppStore((state) => state.progression.activeThemeId);
   const dailyGoal = useAppStore((state) => state.progression.dailyGoal);
   const streak = useAppStore((state) => state.progression.streak);
+  const profile = useAppStore((state) => state.profile);
+  const saveProfile = useAppStore((state) => state.saveProfile);
+  const lastSession = useAppStore((state) => state.lastSession);
+  const clearLastSession = useAppStore((state) => state.clearLastSession);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const mathOperationPrefs = useAppStore((state) => state.settings.mathOperationPrefs);
   const setMathOperationEnabled = useAppStore((state) => state.setMathOperationEnabled);
@@ -96,6 +116,12 @@ export default function HomeScreen() {
     () => PROGRESSION_THEMES.find((theme) => theme.id === activeThemeId) ?? PROGRESSION_THEMES[0],
     [activeThemeId]
   );
+  const resumableSession = useMemo(() => {
+    if (!lastSession) return null;
+    if (isSessionExpired(lastSession.updatedAt)) return null;
+    return lastSession;
+  }, [lastSession]);
+  const needsProfileOnboarding = !profile.nickname || !profile.gender;
   const isCompact = isSmallHeightDevice;
   const isVeryCompact = isVerySmallHeightDevice;
   const gameButtonSize = isVeryCompact ? scale(98) : isCompact ? scale(108) : scale(120);
@@ -111,6 +137,13 @@ export default function HomeScreen() {
     : isCompact
       ? verticalScale(118)
       : verticalScale(150);
+
+  useEffect(() => {
+    if (!lastSession) return;
+    if (isSessionExpired(lastSession.updatedAt)) {
+      clearLastSession(lastSession.game);
+    }
+  }, [clearLastSession, lastSession]);
 
   // Title Animation
   const titleScale = useSharedValue(1);
@@ -171,6 +204,24 @@ export default function HomeScreen() {
     setIsJourneyOpen(true);
   }, []);
 
+  const handleParentProgressPress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsParentProgressOpen(true);
+  }, []);
+
+  const handleResumePress = useCallback(() => {
+    if (!resumableSession) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigateTo(getResumeRoute(resumableSession));
+  }, [navigateTo, resumableSession]);
+
+  const handleSaveProfile = useCallback(
+    (payload: { nickname: string; gender: 'male' | 'female' }) => {
+      saveProfile(payload);
+    },
+    [saveProfile]
+  );
+
   const mathOperationOptions: {
     key: MathOperation;
     label: string;
@@ -184,12 +235,12 @@ export default function HomeScreen() {
 
   // Bubble configurations — candy colors floating upward
   const bubbles = [
-    { color: Colors.candy.pink, size: 30, startX: SCREEN_WIDTH * 0.1, delay: 0, duration: 8000 },
-    { color: Colors.candy.lavender, size: 22, startX: SCREEN_WIDTH * 0.3, delay: 2000, duration: 10000 },
-    { color: Colors.candy.mint, size: 35, startX: SCREEN_WIDTH * 0.55, delay: 4000, duration: 9000 },
-    { color: Colors.candy.lemon, size: 18, startX: SCREEN_WIDTH * 0.75, delay: 1000, duration: 11000 },
-    { color: Colors.candy.skyBlue, size: 26, startX: SCREEN_WIDTH * 0.9, delay: 3000, duration: 7000 },
-    { color: Colors.candy.peach, size: 20, startX: SCREEN_WIDTH * 0.45, delay: 5000, duration: 12000 },
+    { color: Colors.candy.pink, size: 30, startX: windowWidth * 0.1, delay: 0, duration: 8000 },
+    { color: Colors.candy.lavender, size: 22, startX: windowWidth * 0.3, delay: 2000, duration: 10000 },
+    { color: Colors.candy.mint, size: 35, startX: windowWidth * 0.55, delay: 4000, duration: 9000 },
+    { color: Colors.candy.lemon, size: 18, startX: windowWidth * 0.75, delay: 1000, duration: 11000 },
+    { color: Colors.candy.skyBlue, size: 26, startX: windowWidth * 0.9, delay: 3000, duration: 7000 },
+    { color: Colors.candy.peach, size: 20, startX: windowWidth * 0.45, delay: 5000, duration: 12000 },
   ];
 
   return (
@@ -199,7 +250,7 @@ export default function HomeScreen() {
       {/* Sky gradient background */}
       <LinearGradient
         colors={[...activeTheme.skyGradient]}
-        style={styles.backgroundGradient}
+        style={[styles.backgroundGradient, { height: windowHeight * 0.7 }]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
       />
@@ -207,7 +258,7 @@ export default function HomeScreen() {
       {/* Grass at bottom */}
       <LinearGradient
         colors={[...activeTheme.grassGradient]}
-        style={styles.grass}
+        style={[styles.grass, { height: windowHeight * 0.35 }]}
         start={{ x: 0.5, y: 0 }}
         end={{ x: 0.5, y: 1 }}
       />
@@ -280,6 +331,7 @@ export default function HomeScreen() {
       <View style={[styles.topControls, { top: topControlsTop }]}>
         <View style={styles.leftControlGroup}>
           <SettingsButton onPress={() => setIsSettingsOpen(true)} />
+          <ParentGateButton onPress={handleParentProgressPress} />
           <JourneyButton onPress={handleJourneyPress} totalStars={totalStars} />
         </View>
         <AchievementsButton
@@ -297,6 +349,9 @@ export default function HomeScreen() {
           <Text style={[styles.subtitle, isCompact && styles.subtitleCompact]}>
             MATH & ADVENTURES
           </Text>
+          {profile.nickname ? (
+            <Text style={styles.nicknameText}>Hi {profile.nickname}!</Text>
+          ) : null}
         </Animated.View>
 
         {/* Mascot */}
@@ -379,14 +434,15 @@ export default function HomeScreen() {
       <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 10 }]}>
         {/* <SoundButton onPress={handleSoundToggle} isMuted={isMuted} /> */}
         <ScoreBadge />
-        <View style={styles.goalChip}>
-          <Text style={styles.goalChipText}>
-            ⭐ {dailyGoal.earnedStars}/{dailyGoal.targetStars}
-          </Text>
-          <Text style={styles.goalChipText}>
-            🔥 {streak.current} {streak.shieldAvailable ? '🛡️' : ''}
-          </Text>
-        </View>
+        <SessionFlowCard
+          canResume={Boolean(resumableSession)}
+          resumeLabel={resumableSession?.progressLabel ?? ''}
+          onResume={handleResumePress}
+          completedRounds={dailyGoal.completedRounds}
+          targetRounds={dailyGoal.targetRounds}
+          streakDays={streak.current}
+          shieldAvailable={streak.shieldAvailable}
+        />
       </View>
 
       {/* Settings PopBox */}
@@ -429,6 +485,7 @@ export default function HomeScreen() {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     setMathOperationEnabled(option.key, !enabled);
                   }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   activeOpacity={0.85}
                   style={[
                     styles.mathOpChip,
@@ -498,6 +555,18 @@ export default function HomeScreen() {
           }
         }}
       />
+
+      <ParentProgressPopup
+        visible={isParentProgressOpen}
+        onClose={() => setIsParentProgressOpen(false)}
+      />
+
+      <ProfileOnboardingPopup
+        visible={needsProfileOnboarding}
+        initialNickname={profile.nickname}
+        initialGender={profile.gender}
+        onSave={handleSaveProfile}
+      />
     </View>
   );
 }
@@ -512,24 +581,23 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    height: SCREEN_HEIGHT * 0.7,
   },
   grass: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    height: SCREEN_HEIGHT * 0.35,
     borderTopLeftRadius: scale(100),
     borderTopRightRadius: scale(100),
   },
   tree: {
     position: 'absolute',
     fontSize: scale(80),
-    bottom: verticalScale(200),
+    bottom: verticalScale(250),
   },
   treeLeft: {
     left: -scale(15),
+
   },
   treeRight: {
     right: -scale(15),
@@ -566,20 +634,6 @@ const styles = StyleSheet.create({
     zIndex: 100,
     gap: scale(8),
   },
-  goalChip: {
-    backgroundColor: 'rgba(255,255,255,0.86)',
-    borderRadius: scale(14),
-    borderWidth: 2,
-    borderColor: Colors.white,
-    paddingHorizontal: scale(10),
-    paddingVertical: verticalScale(6),
-    gap: verticalScale(1),
-  },
-  goalChipText: {
-    fontFamily: Typography.fontFamily.display,
-    fontSize: scale(11),
-    color: Colors.neutral[700],
-  },
   mainContent: {
     flex: 1,
     alignItems: 'center',
@@ -611,6 +665,12 @@ const styles = StyleSheet.create({
   },
   subtitleCompact: {
     fontSize: scale(13),
+  },
+  nicknameText: {
+    marginTop: verticalScale(4),
+    fontFamily: Typography.fontFamily.display,
+    fontSize: scale(14),
+    color: Colors.secondary.dark,
   },
   books: {
     fontSize: scale(60),
@@ -707,6 +767,7 @@ const styles = StyleSheet.create({
   },
   mathOpChip: {
     minWidth: scale(70),
+    minHeight: verticalScale(44),
     borderRadius: scale(14),
     borderWidth: 2,
     paddingHorizontal: scale(10),

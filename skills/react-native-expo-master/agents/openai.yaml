@@ -1,0 +1,4 @@
+interface:
+  display_name: "React Native Expo Master"
+  short_description: "Build high-performance Expo apps with strict architecture."
+  default_prompt: "Use $react-native-expo-master to implement performant, strict-typed Expo React Native features with reanimated, FlashList, and Zustand."

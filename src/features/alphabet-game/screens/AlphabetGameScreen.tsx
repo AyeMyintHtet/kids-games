@@ -1,17 +1,23 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, StatusBar, Platform, ScrollView } from 'react-native';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, Pressable, StatusBar, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { useCloudTransition } from '@/hooks/useCloudTransition';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, useSharedValue, useAnimatedStyle, withSpring, withSequence, withTiming, withRepeat } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/colors';
+import { Config } from '@/constants/config';
 import { TactileButton } from '@/components/TactileButton';
 import { GameCountdown } from '@/components/GameCountdown';
 import { GiveUpModal } from '@/components/GiveUpModal';
 import { RoundResultPopup } from '@/components/RoundResultPopup';
 import { ScoreBadge } from '@/components/ScoreBadge';
-import { useAppStore } from '@/store/useAppStore';
+import {
+  useAppStore,
+  type AlphabetSessionPayload,
+  type RoundSummary,
+  type SavedSession,
+} from '@/store/useAppStore';
 import {
   ALPHABET,
   BACKGROUNDS,
@@ -29,13 +35,17 @@ import { getAlphabetLevelConfig } from '@/features/progression/model/progression
 import {
   isSmallHeightDevice,
   isVerySmallHeightDevice,
-  SCREEN_HEIGHT,
   scale,
   verticalScale,
 } from '@/utils/responsive';
-import type { RoundSummary } from '@/store/useAppStore';
 
 const PAUSE_ICON = require('@/assets/images/pause.png');
+const SMALL_PRESSABLE_HIT_SLOP = {
+  top: 8,
+  bottom: 8,
+  left: 8,
+  right: 8,
+} as const;
 
 const AnimatedLetterButton = ({
   letter,
@@ -92,6 +102,7 @@ const AnimatedLetterButton = ({
         onPress={() => onPress(letter)}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        hitSlop={4}
         style={styles.pressableContainer}
       >
         <Animated.View
@@ -114,15 +125,31 @@ const AnimatedLetterButton = ({
   );
 };
 
+const isAlphabetSession = (
+  session: SavedSession | null
+): session is Extract<SavedSession, { game: 'alphabet' }> => {
+  return Boolean(session && session.game === 'alphabet');
+};
+
+const isSessionExpired = (updatedAt: string): boolean => {
+  const updatedMs = new Date(updatedAt).getTime();
+  if (!Number.isFinite(updatedMs)) return true;
+  return Date.now() - updatedMs > Config.game.sessionTimeout;
+};
+
 export const AlphabetGameScreen = () => {
   const { replaceTo } = useCloudTransition();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const difficulty = useAppStore((state) => state.settings.difficulty);
   const addScore = useAppStore((state) => state.addScore);
   const recordGameResult = useAppStore((state) => state.recordGameResult);
   const currentLevel = useAppStore((state) => state.progression.games.alphabet.currentLevel);
   const setCurrentGameLevel = useAppStore((state) => state.setCurrentGameLevel);
   const activateRecoveryMode = useAppStore((state) => state.activateRecoveryMode);
+  const lastSession = useAppStore((state) => state.lastSession);
+  const saveLastSession = useAppStore((state) => state.saveLastSession);
+  const clearLastSession = useAppStore((state) => state.clearLastSession);
   const levelConfig = useMemo(() => getAlphabetLevelConfig(currentLevel), [currentLevel]);
   const targetAlphabet = useMemo(
     () => ALPHABET.slice(0, levelConfig.letterCount),
@@ -146,22 +173,27 @@ export const AlphabetGameScreen = () => {
   const [roundSummary, setRoundSummary] = useState<RoundSummary | null>(null);
   const [showRoundResult, setShowRoundResult] = useState(false);
   const resultRecordedRef = useRef(false);
+  const hasRestoredSessionRef = useRef(false);
+  const initializedLevelRef = useRef<number | null>(null);
   const isCompact = isSmallHeightDevice;
   const isVeryCompact = isVerySmallHeightDevice;
+  const isNarrow = windowWidth <= 360;
+  const isTablet = windowWidth >= 768;
   const boardMaxHeight = isVeryCompact
-    ? SCREEN_HEIGHT * 0.44
+    ? windowHeight * 0.44
     : isCompact
-      ? SCREEN_HEIGHT * 0.50
-      : SCREEN_HEIGHT * 0.62;
+      ? windowHeight * 0.50
+      : windowHeight * 0.62;
+  const boardAspectRatio = isVeryCompact ? 0.92 : isCompact ? 0.86 : 0.78;
+  const boardWidth = isTablet ? '82%' : isNarrow ? '98%' : isCompact ? '96%' : '92%';
+  const headerHorizontalPadding = isNarrow ? scale(10) : scale(16);
+  const contentHorizontalPadding = isNarrow ? scale(8) : scale(12);
+  const contentBottomPadding = Math.max(insets.bottom + verticalScale(16), verticalScale(20));
   const titleSize = isVeryCompact ? scale(18) : isCompact ? scale(20) : scale(22);
   const timerSize = isVeryCompact ? scale(18) : isCompact ? scale(20) : scale(24);
   const progressSize = isVeryCompact ? scale(24) : isCompact ? scale(28) : scale(34);
   const progressSubSize = isVeryCompact ? scale(14) : isCompact ? scale(16) : scale(20);
-  const headerIconSize = isVeryCompact ? scale(42) : scale(50);
-  const footerBottom = Math.max(
-    isCompact ? verticalScale(16) : 40,
-    insets.bottom + (isCompact ? verticalScale(6) : 12)
-  );
+  const headerIconSize = Math.max(isVeryCompact ? scale(42) : scale(50), 44);
 
   // Pick 3 unique random candy colors on mount for Timer / TapNext / Correct texts
   const [timerColor, tapNextColor, correctColor] = useMemo(() => {
@@ -217,7 +249,7 @@ export const AlphabetGameScreen = () => {
     );
   };
 
-  const recordAlphabetResult = (
+  const recordAlphabetResult = useCallback((
     score: number,
     timeMs: number | null,
     correct: number,
@@ -237,9 +269,55 @@ export const AlphabetGameScreen = () => {
       hintsUsed: wrong > 0,
       outcome,
     });
+  }, [currentLevel, recordGameResult]);
+
+  const restoreSession = (payload: AlphabetSessionPayload, updatedAt: string) => {
+    const updatedMs = new Date(updatedAt).getTime();
+    const safeElapsed = Math.max(0, Math.round(payload.elapsedMs));
+    const resumedRoundStartedAt =
+      payload.phase === 'playing' && Number.isFinite(updatedMs)
+        ? updatedMs - safeElapsed
+        : payload.roundStartedAt;
+
+    setShuffledLetters(payload.shuffledLetters);
+    setNextLetterIndex(Math.max(0, Math.round(payload.nextLetterIndex)));
+    setCorrectLetters(new Set(payload.correctLetters));
+    setShakeTickByLetter(payload.shakeTickByLetter);
+    setRoundScore(Math.max(0, Math.round(payload.roundScore)));
+    setStreak(Math.max(0, Math.round(payload.streak)));
+    setBestStreak(Math.max(0, Math.round(payload.bestStreak)));
+    setWrongCount(Math.max(0, Math.round(payload.wrongCount)));
+    setRoundStartedAt(resumedRoundStartedAt);
+    setLetterStartedAt(payload.phase === 'playing' ? Date.now() : payload.letterStartedAt);
+    setElapsedMs(safeElapsed);
+    setRoundSummary(null);
+    setShowRoundResult(false);
+    setGamePhase(payload.phase === 'playing' ? 'playing' : 'intro');
+    resultRecordedRef.current = false;
   };
 
-  const handleLetterPress = (letter: string) => {
+  useEffect(() => {
+    if (hasRestoredSessionRef.current) {
+      return;
+    }
+    if (!isAlphabetSession(lastSession)) {
+      return;
+    }
+    if (isSessionExpired(lastSession.updatedAt)) {
+      clearLastSession('alphabet');
+      return;
+    }
+    if (lastSession.level !== currentLevel) {
+      setCurrentGameLevel('alphabet', lastSession.level);
+      return;
+    }
+
+    restoreSession(lastSession.payload, lastSession.updatedAt);
+    hasRestoredSessionRef.current = true;
+    initializedLevelRef.current = currentLevel;
+  }, [clearLastSession, currentLevel, lastSession, setCurrentGameLevel]);
+
+  const handleLetterPress = useCallback((letter: string) => {
     if (gamePhase !== 'playing' || isRoundComplete || correctLetters.has(letter)) {
       return;
     }
@@ -313,17 +391,35 @@ export const AlphabetGameScreen = () => {
       ...prev,
       [letter]: (prev[letter] ?? 0) + 1,
     }));
-  };
+  }, [
+    addScore,
+    bestStreak,
+    correctLetters,
+    difficulty,
+    expectedLetter,
+    gamePhase,
+    isRoundComplete,
+    letterStartedAt,
+    nextLetterIndex,
+    recordAlphabetResult,
+    roundScore,
+    roundStartedAt,
+    setRoundSummary,
+    setShowRoundResult,
+    streak,
+    targetAlphabet.length,
+    wrongCount,
+  ]);
 
-  const openGiveUpModal = () => {
+  const openGiveUpModal = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setShowGiveUpModal(true);
-  };
+  }, []);
 
-  const handleCancelGiveUp = () => {
+  const handleCancelGiveUp = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowGiveUpModal(false);
-  };
+  }, []);
 
   const handleConfirmGiveUp = () => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -345,6 +441,7 @@ export const AlphabetGameScreen = () => {
       }
       return;
     }
+    clearLastSession('alphabet');
     replaceTo('/');
   };
 
@@ -352,7 +449,7 @@ export const AlphabetGameScreen = () => {
    * Callback from GameCountdown when 3..2..1 finishes.
    * Starts the playing phase, timer, and board pop-in animation.
    */
-  const handleCountdownComplete = () => {
+  const handleCountdownComplete = useCallback(() => {
     const now = Date.now();
     setGamePhase('playing');
     setRoundStartedAt(now);
@@ -365,7 +462,7 @@ export const AlphabetGameScreen = () => {
       withTiming(0.8, { duration: 0 }),
       withSpring(1, { damping: 12, stiffness: 100 })
     );
-  };
+  }, [boardScale]);
 
   // Gentle pulse animation on the pause button so kids notice it
   useEffect(() => {
@@ -392,9 +489,92 @@ export const AlphabetGameScreen = () => {
   }, [gamePhase, isRoundComplete, roundStartedAt]);
 
   useEffect(() => {
+    if (initializedLevelRef.current === currentLevel) {
+      return;
+    }
+
+    const shouldWaitForSavedLevel =
+      !hasRestoredSessionRef.current &&
+      isAlphabetSession(lastSession) &&
+      !isSessionExpired(lastSession.updatedAt) &&
+      lastSession.level !== currentLevel;
+
+    if (shouldWaitForSavedLevel) {
+      return;
+    }
+
+    if (
+      !hasRestoredSessionRef.current &&
+      isAlphabetSession(lastSession) &&
+      !isSessionExpired(lastSession.updatedAt) &&
+      lastSession.level === currentLevel
+    ) {
+      return;
+    }
     startNewRound(currentLevel);
+    initializedLevelRef.current = currentLevel;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentLevel]);
+  }, [currentLevel, lastSession]);
+
+  useEffect(() => {
+    if (showRoundResult) {
+      return;
+    }
+
+    const hasProgress =
+      gamePhase === 'playing' ||
+      nextLetterIndex > 0 ||
+      wrongCount > 0 ||
+      roundScore > 0;
+
+    if (!hasProgress) {
+      clearLastSession('alphabet');
+      return;
+    }
+
+    const payload: AlphabetSessionPayload = {
+      shuffledLetters,
+      nextLetterIndex,
+      correctLetters: Array.from(correctLetters),
+      shakeTickByLetter,
+      roundScore,
+      streak,
+      bestStreak,
+      wrongCount,
+      roundStartedAt,
+      letterStartedAt,
+      elapsedMs,
+      phase: gamePhase,
+    };
+
+    saveLastSession({
+      game: 'alphabet',
+      route: '/alphabet',
+      level: currentLevel,
+      phase: gamePhase,
+      progressLabel: `Level ${currentLevel} • ${nextLetterIndex}/${targetAlphabet.length} letters`,
+      updatedAt: new Date().toISOString(),
+      payload,
+    });
+  }, [
+    bestStreak,
+    clearLastSession,
+    correctLetters,
+    currentLevel,
+    elapsedMs,
+    gamePhase,
+    letterStartedAt,
+    nextLetterIndex,
+    roundScore,
+    roundStartedAt,
+    saveLastSession,
+    shakeTickByLetter,
+    showRoundResult,
+    shuffledLetters,
+    streak,
+    targetAlphabet.length,
+    wrongCount,
+  ]);
 
 
 
@@ -411,9 +591,9 @@ export const AlphabetGameScreen = () => {
 
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingHorizontal: headerHorizontalPadding }]}>
           {/* Top-left pause button */}
-          <Pressable onPress={openGiveUpModal} >
+          <Pressable onPress={openGiveUpModal} hitSlop={SMALL_PRESSABLE_HIT_SLOP}>
             <Animated.View
               style={[
                 styles.pauseButton,
@@ -432,12 +612,12 @@ export const AlphabetGameScreen = () => {
             </Animated.View>
           </Pressable>
 
-          <View style={styles.titleContainer}>
+          <View style={[styles.titleContainer, isNarrow && styles.titleContainerNarrow]}>
             <Text style={[styles.title, { fontSize: titleSize }]}>Alphabet Fun</Text>
           </View>
           <View style={[styles.headerSpacer, { width: headerIconSize, height: headerIconSize }]} />
         </View>
-        <View style={styles.scoreRow}>
+        <View style={[styles.scoreRow, { paddingHorizontal: headerHorizontalPadding }]}>
           <ScoreBadge game="alphabet" />
         </View>
         {gamePhase === 'playing' && (
@@ -451,10 +631,14 @@ export const AlphabetGameScreen = () => {
           contentContainerStyle={[
             styles.contentScroll,
             isCompact && styles.contentScrollCompact,
+            {
+              paddingHorizontal: contentHorizontalPadding,
+              paddingBottom: contentBottomPadding,
+            },
           ]}
           showsVerticalScrollIndicator={false}
           bounces={false}
-          scrollEnabled={isCompact}
+          scrollEnabled
         >
 
           {gamePhase !== 'playing' && (
@@ -485,7 +669,8 @@ export const AlphabetGameScreen = () => {
                   styles.boardContainer,
                   {
                     maxHeight: boardMaxHeight,
-                    width: isCompact ? '96%' : '92%',
+                    width: boardWidth,
+                    aspectRatio: boardAspectRatio,
                   },
                   boardAnimatedStyle,
                 ]}
@@ -496,7 +681,14 @@ export const AlphabetGameScreen = () => {
                   contentFit="fill"
                 /> */}
 
-                <View pointerEvents="box-none" style={styles.boardOverlay}>
+                <View
+                  pointerEvents="box-none"
+                  style={[
+                    styles.boardOverlay,
+                    isCompact && styles.boardOverlayCompact,
+                    isNarrow && styles.boardOverlayNarrow,
+                  ]}
+                >
                   {/* Grid Overlay */}
                   <View style={styles.lettersGrid}>
                     {shuffledLetters.map((letter, index) => (
@@ -515,7 +707,7 @@ export const AlphabetGameScreen = () => {
               </Animated.View>
 
               {/* Extra bottom padding accounts for Android software nav buttons */}
-              <View style={[styles.footer, { bottom: footerBottom }]}>
+              <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, verticalScale(8)) }]}>
                 {isRoundComplete && (
                   <TactileButton
                     onPress={startNewRound}
@@ -549,8 +741,12 @@ export const AlphabetGameScreen = () => {
         visible={showRoundResult}
         summary={roundSummary}
         gameTitle="Alphabet Fun"
-        onPlayAgain={() => startNewRound(currentLevel)}
+        onPlayAgain={() => {
+          clearLastSession('alphabet');
+          startNewRound(currentLevel);
+        }}
         onPlayNext={() => {
+          clearLastSession('alphabet');
           const nextLevel = roundSummary?.nextLevel ?? null;
           if (nextLevel) {
             setCurrentGameLevel('alphabet', nextLevel);
@@ -559,8 +755,12 @@ export const AlphabetGameScreen = () => {
           }
           startNewRound(currentLevel);
         }}
-        onBackHome={() => replaceTo('/')}
+        onBackHome={() => {
+          clearLastSession('alphabet');
+          replaceTo('/');
+        }}
         onTryRecovery={(suggestedLevel) => {
+          clearLastSession('alphabet');
           activateRecoveryMode('alphabet', suggestedLevel);
           startNewRound(suggestedLevel);
         }}
@@ -577,8 +777,8 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     flexDirection: 'column',
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
   },
   header: {
     flexDirection: 'row',
@@ -595,7 +795,6 @@ const styles = StyleSheet.create({
   scoreRow: {
     width: '100%',
     alignItems: 'flex-end',
-    paddingHorizontal: 16,
     marginTop: 8,
   },
   pauseButton: {
@@ -617,7 +816,11 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: Colors.secondary.main,
     elevation: 4,
-    marginLeft: -30,
+    maxWidth: '70%',
+  },
+  titleContainerNarrow: {
+    maxWidth: '64%',
+    paddingHorizontal: 14,
   },
   title: {
     fontFamily: 'SuperWonder',
@@ -641,10 +844,9 @@ const styles = StyleSheet.create({
   contentScroll: {
     flexGrow: 1,
     alignItems: 'center',
-    paddingBottom: verticalScale(20),
   },
   contentScrollCompact: {
-    paddingBottom: verticalScale(10),
+    paddingBottom: verticalScale(14),
   },
   boardContainer: {
     width: '92%',
@@ -667,6 +869,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  boardOverlayCompact: {
+    left: '7%',
+    right: '7%',
+    top: '9%',
+    bottom: '11%',
+  },
+  boardOverlayNarrow: {
+    left: '5%',
+    right: '5%',
+    top: '8%',
+    bottom: '10%',
+  },
   lettersGrid: {
     width: '100%',
     height: '100%',
@@ -679,7 +893,7 @@ const styles = StyleSheet.create({
     width: Platform.OS === 'web' ? '18%' : '19%',
     aspectRatio: 1,
     marginHorizontal: '0.5%',
-    marginVertical: 6,
+    marginVertical: verticalScale(4),
   },
   pressableContainer: {
     flex: 1,
@@ -718,18 +932,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.4)',
   },
   footer: {
-    position: 'absolute',
-    // bottom is set dynamically via insets.bottom in the component
-    left: 0,
-    right: 0,
+    width: '100%',
+    marginTop: verticalScale(12),
     alignItems: 'center',
   },
   // placeholderText + countdownText styles moved to shared GameCountdown component
   progressContainer: {
-    marginTop: 44,
-    marginBottom: 14,
+    marginTop: verticalScale(24),
+    marginBottom: verticalScale(12),
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: scale(16),
   },
   progressContainerCompact: {
     marginTop: verticalScale(16),
