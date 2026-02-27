@@ -2,9 +2,11 @@ import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PopBox } from '@/components/PopBox';
+import { AdBanner } from '@/components/ads/AdBanner';
 import { Colors } from '@/constants/colors';
 import { Typography } from '@/constants/typography';
 import { useAppStore } from '@/store/useAppStore';
+import { AD_PLACEMENTS } from '@/features/monetization/model/ads';
 import {
   buildParentWeeklyReport,
   formatDurationLabel,
@@ -110,6 +112,11 @@ export const ParentProgressPopup: React.FC<ParentProgressPopupProps> = ({
           ))}
         </View>
       </ScrollView>
+
+      <AdBanner
+        placement={AD_PLACEMENTS.HOME_BANNER}
+        style={styles.bannerSlot}
+      />
     </PopBox>
   );
 };
@@ -119,6 +126,9 @@ const styles = StyleSheet.create({
   content: {
     gap: verticalScale(8),
     paddingBottom: verticalScale(6),
+  },
+  bannerSlot: {
+    marginTop: verticalScale(8),
   },
   subtitle: {
     fontFamily: Typography.fontFamily.display,

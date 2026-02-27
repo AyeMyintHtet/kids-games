@@ -20,11 +20,13 @@ import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/colors';
 import { Typography } from '@/constants/typography';
 import { useAppStore, type GameKey } from '@/store/useAppStore';
+import { AdBanner } from '@/components/ads/AdBanner';
 import {
   MAX_GAME_LEVEL,
   PROGRESSION_THEMES,
   getRequiredStarsForLevel,
 } from '@/features/progression/model/progression';
+import { AD_PLACEMENTS } from '@/features/monetization/model/ads';
 import {
   isSmallHeightDevice,
   isVerySmallHeightDevice,
@@ -289,6 +291,11 @@ export const ProgressJourneyPopup: React.FC<ProgressJourneyPopupProps> = ({
                   Needs practice: {parentInsights.needsPractice.label} ({parentInsights.needsPractice.avgAccuracy}%)
                 </Text>
               </View>
+
+              <AdBanner
+                placement={AD_PLACEMENTS.HOME_BANNER}
+                style={styles.bannerSlot}
+              />
             </ScrollView>
 
             <Pressable style={styles.closeButton} onPress={onClose}>
@@ -513,6 +520,9 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.display,
     fontSize: scale(11),
     color: Colors.neutral[700],
+  },
+  bannerSlot: {
+    marginTop: verticalScale(2),
   },
   closeButton: {
     alignSelf: 'center',

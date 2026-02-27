@@ -53,7 +53,7 @@ describe('progression model', () => {
 
     const earlyAlphabet = getAlphabetLevelConfig(1);
     const advancedAlphabet = getAlphabetLevelConfig(19);
-    expect(earlyAlphabet.letterCount).toBeLessThan(advancedAlphabet.letterCount);
+    expect(earlyAlphabet.letterCount).toBe(26);
     expect(advancedAlphabet.letterCount).toBe(26);
 
     const earlyAnimals = getAnimalLevelConfig(1);
@@ -62,4 +62,3 @@ describe('progression model', () => {
     expect(earlyAnimals.durationSeconds).toBeGreaterThan(advancedAnimals.durationSeconds);
   });
 });
-

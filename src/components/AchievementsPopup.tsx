@@ -20,6 +20,8 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/colors';
 import { Typography } from '@/constants/typography';
+import { AdBanner } from '@/components/ads/AdBanner';
+import { AD_PLACEMENTS } from '@/features/monetization/model/ads';
 import { ACHIEVEMENTS } from '@/features/achievements/model/achievements';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -153,6 +155,11 @@ export const AchievementsPopup: React.FC<AchievementsPopupProps> = ({
               <Text style={styles.progressText}>
                 {unlocked.length}/{ACHIEVEMENTS.length} badges unlocked
               </Text>
+
+              <AdBanner
+                placement={AD_PLACEMENTS.HOME_BANNER}
+                style={styles.bannerSlot}
+              />
             </ScrollView>
 
             <Pressable style={[styles.closeButton, isCompact && styles.closeButtonCompact]} onPress={onClose}>
@@ -308,6 +315,9 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontFamily.display,
     fontSize: scale(12),
     color: Colors.secondary.dark,
+  },
+  bannerSlot: {
+    marginTop: verticalScale(10),
   },
   closeButton: {
     alignSelf: 'center',

@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,14 +18,23 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Colors } from '@/constants/colors';
+import { Config } from '@/constants/config';
 import { Typography } from '@/constants/typography';
-import type { RoundSummary } from '@/store/useAppStore';
+import { useAppStore, type RoundSummary } from '@/store/useAppStore';
 import {
   isSmallHeightDevice,
   isVerySmallHeightDevice,
   scale,
   verticalScale,
 } from '@/utils/responsive';
+import { AdBanner } from '@/components/ads/AdBanner';
+import {
+  AD_PLACEMENTS,
+  getInterstitialCapsConfig,
+  isMonetizationEnabledForPlatform,
+  shouldShowInterstitialByCaps,
+} from '@/features/monetization/model/ads';
+import { adService } from '@/services/ads/adService';
 
 type RoundResultPopupProps = {
   visible: boolean;
@@ -45,6 +55,9 @@ export const RoundResultPopup: React.FC<RoundResultPopupProps> = ({
   onBackHome,
   onTryRecovery,
 }) => {
+  const monetization = useAppStore((state) => state.monetization);
+  const markInterstitialShown = useAppStore((state) => state.markInterstitialShown);
+  const interstitialAttemptKeyRef = useRef<string | null>(null);
   const isCompact = isSmallHeightDevice;
   const isVeryCompact = isVerySmallHeightDevice;
   const cardScale = useSharedValue(0.86);
@@ -89,6 +102,57 @@ export const RoundResultPopup: React.FC<RoundResultPopupProps> = ({
     if (summary.outcome === 'lost') return 'Great Try!';
     return 'Round Ended!';
   }, [summary]);
+
+  useEffect(() => {
+    if (!visible || !summary) return;
+
+    const attemptKey = `${summary.game}-${summary.level}-${summary.score}-${summary.outcome}-${summary.totalStarsForGame}-${summary.dailyGoal.completedRounds}`;
+    if (interstitialAttemptKeyRef.current === attemptKey) {
+      return;
+    }
+    interstitialAttemptKeyRef.current = attemptKey;
+
+    if (!Config.monetization.interstitialEnabled) return;
+    if (
+      !isMonetizationEnabledForPlatform({
+        platform: Platform.OS,
+        remoteAdsEnabled: monetization.remoteAdsEnabled,
+      })
+    ) {
+      return;
+    }
+
+    const canShow = shouldShowInterstitialByCaps(
+      {
+        lastInterstitialAt: monetization.lastInterstitialAt,
+        interstitialShownToday: monetization.interstitialShownToday,
+        roundsSinceInterstitial: monetization.roundsSinceInterstitial,
+      },
+      getInterstitialCapsConfig(),
+      Date.now()
+    );
+    if (!canShow) return;
+
+    let cancelled = false;
+    (async () => {
+      const shown = await adService.showInterstitial();
+      if (shown && !cancelled) {
+        markInterstitialShown();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    markInterstitialShown,
+    monetization.interstitialShownToday,
+    monetization.lastInterstitialAt,
+    monetization.remoteAdsEnabled,
+    monetization.roundsSinceInterstitial,
+    summary,
+    visible,
+  ]);
 
   if (!visible || !summary) return null;
 
@@ -201,6 +265,11 @@ export const RoundResultPopup: React.FC<RoundResultPopupProps> = ({
             )}
 
             <View style={[styles.buttonsColumn, isVeryCompact && styles.buttonsColumnCompact]}>
+              <AdBanner
+                placement={AD_PLACEMENTS.ROUND_RESULT_BANNER}
+                style={styles.bannerSlot}
+              />
+
               {canPlayNext && (
                 <Pressable style={styles.primaryButton} onPress={onPlayNext}>
                   <Text style={styles.primaryButtonText}>Play Next Level</Text>
@@ -411,6 +480,9 @@ const styles = StyleSheet.create({
   },
   buttonsColumnCompact: {
     gap: verticalScale(6),
+  },
+  bannerSlot: {
+    marginBottom: verticalScale(6),
   },
   primaryButton: {
     borderRadius: scale(16),

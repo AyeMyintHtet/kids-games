@@ -5,12 +5,15 @@ import { Stack } from 'expo-router';
 import * as SplashScreenModule from 'expo-splash-screen';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, LogBox } from 'react-native';
+import { StyleSheet, LogBox, Platform } from 'react-native';
 import { SplashScreen } from '../src/components/SplashScreen';
 import { useBackgroundMusic } from '../src/hooks/useBackgroundMusic';
 import { CloudTransition } from '../src/components/CloudTransition';
 import { AchievementUnlockPopup } from '../src/components/AchievementUnlockPopup';
 import { CloudTransitionProvider, useCloudTransition } from '../src/hooks/useCloudTransition';
+import { Config } from '../src/constants/config';
+import { adService } from '../src/services/ads/adService';
+import { fetchRemoteAdsEnabled } from '../src/services/ads/adRemoteConfigService';
 import { useAppStore } from '../src/store/useAppStore';
 
 LogBox.ignoreLogs([
@@ -59,7 +62,9 @@ SplashScreenModule.preventAutoHideAsync();
  */
 export default function RootLayout() {
   const musicEnabled = useAppStore((state) => state.settings.musicEnabled);
+  const remoteAdsEnabled = useAppStore((state) => state.monetization.remoteAdsEnabled);
   const updateSettings = useAppStore((state) => state.updateSettings);
+  const setRemoteAdsEnabled = useAppStore((state) => state.setRemoteAdsEnabled);
 
   const [fontsLoaded] = useFonts({
     'SuperWonder': require('../src/assets/font/SuperWonder.ttf'),
@@ -101,6 +106,33 @@ export default function RootLayout() {
 
     initializeApp();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncRemoteAdsFlag = async () => {
+      const remoteFlag = await fetchRemoteAdsEnabled();
+      if (!cancelled && typeof remoteFlag === 'boolean') {
+        setRemoteAdsEnabled(remoteFlag);
+      }
+    };
+
+    void syncRemoteAdsFlag();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [setRemoteAdsEnabled]);
+
+  useEffect(() => {
+    if (!Config.monetization.adsEnabled || !remoteAdsEnabled) {
+      return;
+    }
+    if (Config.monetization.androidOnlyMonetization && Platform.OS !== 'android') {
+      return;
+    }
+    void adService.initialize();
+  }, [remoteAdsEnabled]);
 
   // Hide native splash screen once fonts are loaded so our custom one can show
   useEffect(() => {

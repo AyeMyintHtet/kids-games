@@ -195,6 +195,7 @@ interface PopBoxProps {
   title?: string;
   children?: React.ReactNode;
   variant?: PopBoxVariant; // Different themes
+  animationMode?: 'playful' | 'subtle';
   showCloseButton?: boolean;
   dismissible?: boolean;
 }
@@ -217,12 +218,14 @@ export const PopBox: React.FC<PopBoxProps> = ({
   title,
   children,
   variant = 'blue',
+  animationMode = 'playful',
   showCloseButton = true,
   dismissible = true,
 }) => {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const theme = POPBOX_THEMES[variant];
+  const isSubtle = animationMode === 'subtle';
 
   const modalWidth = Math.min(
     screenWidth - BACKDROP_HORIZONTAL_PADDING * 2,
@@ -277,8 +280,12 @@ export const PopBox: React.FC<PopBoxProps> = ({
 
         {/* Main PopBox Container */}
         <Animated.View
-          entering={ZoomIn.springify().damping(12)}
-          exiting={ZoomOut.duration(200)}
+          entering={
+            isSubtle
+              ? ZoomIn.duration(170).easing(Easing.out(Easing.cubic))
+              : ZoomIn.springify().damping(12)
+          }
+          exiting={ZoomOut.duration(isSubtle ? 140 : 200)}
           style={[
             styles.container,
             {
@@ -289,11 +296,15 @@ export const PopBox: React.FC<PopBoxProps> = ({
             },
           ]}
         >
-          {/* ✨ Corner sparkle decorations — magical whimsy for children */}
-          <SparkleDecor emoji="✨" delay={0} style={{ top: -10, left: -10 }} />
-          <SparkleDecor emoji="⭐" delay={300} style={{ top: -10, right: -10 }} />
-          <SparkleDecor emoji="💫" delay={600} style={{ bottom: -10, left: -10 }} />
-          <SparkleDecor emoji="✨" delay={900} style={{ bottom: -10, right: -10 }} />
+          {!isSubtle && (
+            <>
+              {/* ✨ Corner sparkle decorations — magical whimsy for children */}
+              <SparkleDecor emoji="✨" delay={0} style={{ top: -10, left: -10 }} />
+              <SparkleDecor emoji="⭐" delay={300} style={{ top: -10, right: -10 }} />
+              <SparkleDecor emoji="💫" delay={600} style={{ bottom: -10, left: -10 }} />
+              <SparkleDecor emoji="✨" delay={900} style={{ bottom: -10, right: -10 }} />
+            </>
+          )}
 
           {/* Decorative "Stitch" Border Layer */}
           <View style={[styles.stitchBorder, { borderColor: theme.border }]} />
@@ -323,12 +334,13 @@ export const PopBox: React.FC<PopBoxProps> = ({
                 </Text>
               </View>
 
-              {/* Bouncing dots — playful activity indicator between title and close */}
-              <View style={styles.dotsRow}>
-                <BouncingDot color={Colors.candy.pink} size={8} delay={0} />
-                <BouncingDot color={Colors.candy.lemon} size={8} delay={150} />
-                <BouncingDot color={Colors.candy.mint} size={8} delay={300} />
-              </View>
+              {!isSubtle && (
+                <View style={styles.dotsRow}>
+                  <BouncingDot color={Colors.candy.pink} size={8} delay={0} />
+                  <BouncingDot color={Colors.candy.lemon} size={8} delay={150} />
+                  <BouncingDot color={Colors.candy.mint} size={8} delay={300} />
+                </View>
+              )}
             </View>
           )}
 

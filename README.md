@@ -51,6 +51,13 @@ src/
 - ✅ **Encrypted Storage**: MMKV with encryption enabled
 - ✅ **No PII**: Never store personally identifiable information in unencrypted storage
 
+## Privacy Policy URL (Store Requirement)
+
+- Privacy policy source file: `PRIVACY_POLICY.md`
+- Public URL to submit in stores (after pushing to GitHub):
+  `https://github.com/AyeMyintHtet/kids-games/blob/main/PRIVACY_POLICY.md`
+- In-app location: Home -> Settings -> `Privacy Policy`
+
 ## Development Commands
 
 ```bash

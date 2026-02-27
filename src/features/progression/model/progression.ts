@@ -215,8 +215,8 @@ export const getAlphabetLevelConfig = (level: number): AlphabetLevelConfig => {
   return {
     level: safeLevel,
     band: getLevelBand(safeLevel),
-    // L1 starts at 8 letters, L19+ reaches full alphabet.
-    letterCount: Math.min(26, 7 + safeLevel),
+    // Keep all letters visible on every level; difficulty scales by accuracy/time targets.
+    letterCount: 26,
     minAccuracy: safeLevel <= 7 ? 0.7 : safeLevel <= 14 ? 0.78 : 0.84,
     speedTargetMs: Math.max(30000, 94000 - safeLevel * 2300),
   };

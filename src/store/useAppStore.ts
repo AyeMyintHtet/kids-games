@@ -29,6 +29,7 @@ import {
   type RoundOutcome,
   type StarBreakdown,
 } from '@/features/progression/model/progression';
+import { Config } from '@/constants/config';
 
 // -----------------------------------------------------------------------------
 // State Interfaces
@@ -281,6 +282,14 @@ export interface ActivityLogEntry {
   playedAt: string;
 }
 
+export interface MonetizationState {
+  remoteAdsEnabled: boolean;
+  lastInterstitialAt: number | null;
+  interstitialShownToday: number;
+  roundsSinceInterstitial: number;
+  dateKeyForAdCounters: string;
+}
+
 interface AppState {
   // User settings
   settings: UserSettings;
@@ -298,9 +307,12 @@ interface AppState {
   progression: ProgressionState;
   lastSession: SavedSession | null;
   activityLog: ActivityLogEntry[];
+  monetization: MonetizationState;
   addScore: (game: GameKey, points: number) => void;
   saveLastSession: (session: SavedSession) => void;
   clearLastSession: (game?: GameKey) => void;
+  setRemoteAdsEnabled: (enabled: boolean) => void;
+  markInterstitialShown: (timestampMs?: number) => void;
   recordGameResult: (payload: {
     game: GameKey;
     score: number;
@@ -439,6 +451,13 @@ const initialProgression: ProgressionState = {
 const initialActivityLog: ActivityLogEntry[] = [];
 const ACTIVITY_LOG_MAX_ENTRIES = 600;
 const ACTIVITY_LOG_RETENTION_DAYS = 35;
+const initialMonetization: MonetizationState = {
+  remoteAdsEnabled: Config.monetization.adsEnabled,
+  lastInterstitialAt: null,
+  interstitialShownToday: 0,
+  roundsSinceInterstitial: 0,
+  dateKeyForAdCounters: getDateKey(),
+};
 
 const clampLevel = (level: number): number =>
   Math.max(1, Math.min(MAX_GAME_LEVEL, Math.round(level)));
@@ -447,6 +466,57 @@ const isFiniteNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
 const clampAccuracy = (accuracy: number): number => Math.max(0, Math.min(1, accuracy));
+
+const normalizeMonetizationForDate = (
+  state: MonetizationState,
+  dateKey: string
+): MonetizationState => {
+  if (state.dateKeyForAdCounters === dateKey) {
+    return state;
+  }
+  return {
+    ...state,
+    interstitialShownToday: 0,
+    dateKeyForAdCounters: dateKey,
+  };
+};
+
+const sanitizeMonetization = (input: unknown): MonetizationState => {
+  if (!input || typeof input !== 'object') {
+    return initialMonetization;
+  }
+
+  const candidate = input as Partial<MonetizationState>;
+  const dateKey = getDateKey();
+  const lastInterstitialAt =
+    typeof candidate.lastInterstitialAt === 'number' &&
+    Number.isFinite(candidate.lastInterstitialAt) &&
+    candidate.lastInterstitialAt > 0
+      ? Math.round(candidate.lastInterstitialAt)
+      : null;
+  const normalized: MonetizationState = {
+    remoteAdsEnabled:
+      typeof candidate.remoteAdsEnabled === 'boolean'
+        ? candidate.remoteAdsEnabled
+        : initialMonetization.remoteAdsEnabled,
+    lastInterstitialAt,
+    interstitialShownToday: Math.max(
+      0,
+      Math.round(candidate.interstitialShownToday ?? 0)
+    ),
+    roundsSinceInterstitial: Math.max(
+      0,
+      Math.round(candidate.roundsSinceInterstitial ?? 0)
+    ),
+    dateKeyForAdCounters:
+      typeof candidate.dateKeyForAdCounters === 'string' &&
+      candidate.dateKeyForAdCounters.length > 0
+        ? candidate.dateKeyForAdCounters
+        : dateKey,
+  };
+
+  return normalizeMonetizationForDate(normalized, dateKey);
+};
 
 const trimActivityLog = (entries: ActivityLogEntry[]): ActivityLogEntry[] => {
   const now = Date.now();
@@ -958,6 +1028,7 @@ export const useAppStore = create<AppState>()(
       progression: initialProgression,
       lastSession: null,
       activityLog: initialActivityLog,
+      monetization: initialMonetization,
       addScore: (game, points) =>
         set((state) => {
           const safePoints = Math.max(0, Math.round(points));
@@ -998,6 +1069,35 @@ export const useAppStore = create<AppState>()(
             return state;
           }
           return { lastSession: null };
+        }),
+      setRemoteAdsEnabled: (enabled) =>
+        set((state) => ({
+          monetization: {
+            ...state.monetization,
+            remoteAdsEnabled: Boolean(enabled),
+          },
+        })),
+      markInterstitialShown: (timestampMs) =>
+        set((state) => {
+          const shownAt =
+            typeof timestampMs === 'number' &&
+            Number.isFinite(timestampMs) &&
+            timestampMs > 0
+              ? Math.round(timestampMs)
+              : Date.now();
+          const dateKey = getDateKey(shownAt);
+          const normalized = normalizeMonetizationForDate(
+            state.monetization,
+            dateKey
+          );
+          return {
+            monetization: {
+              ...normalized,
+              lastInterstitialAt: shownAt,
+              interstitialShownToday: normalized.interstitialShownToday + 1,
+              roundsSinceInterstitial: 0,
+            },
+          };
         }),
       recordGameResult: ({
         game,
@@ -1151,6 +1251,14 @@ export const useAppStore = create<AppState>()(
             ...resetDailyGoal,
             completedRounds: resetDailyGoal.completedRounds + 1,
           };
+          const normalizedMonetization = normalizeMonetizationForDate(
+            state.monetization,
+            dateKey
+          );
+          const nextMonetization: MonetizationState = {
+            ...normalizedMonetization,
+            roundsSinceInterstitial: normalizedMonetization.roundsSinceInterstitial + 1,
+          };
           const reachedGoalNow =
             !nextDailyGoal.completed &&
             nextDailyGoal.completedRounds >= nextDailyGoal.targetRounds;
@@ -1287,6 +1395,7 @@ export const useAppStore = create<AppState>()(
             progression: nextProgression,
             lastSession: null,
             activityLog: nextActivityLog,
+            monetization: nextMonetization,
             achievements: {
               unlocked: Array.from(unlockedSet),
               lastUnlockedId: latestUnlockedId,
@@ -1356,6 +1465,7 @@ export const useAppStore = create<AppState>()(
           progression: initialProgression,
           lastSession: null,
           activityLog: initialActivityLog,
+          monetization: initialMonetization,
         })),
     }),
     {
@@ -1481,6 +1591,9 @@ export const useAppStore = create<AppState>()(
         const persistedLastSession = sanitizeSavedSession(
           (persisted as { lastSession?: unknown }).lastSession
         );
+        const persistedMonetization = sanitizeMonetization(
+          (persisted as { monetization?: unknown }).monetization
+        );
 
         return {
           ...currentState,
@@ -1505,6 +1618,7 @@ export const useAppStore = create<AppState>()(
           },
           lastSession: persistedLastSession,
           activityLog: mergedActivityLog,
+          monetization: persistedMonetization,
         };
       },
     }

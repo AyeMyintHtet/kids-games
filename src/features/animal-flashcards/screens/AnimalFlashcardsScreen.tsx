@@ -26,7 +26,6 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useCloudTransition } from '@/hooks/useCloudTransition';
 import { Colors } from '@/constants/colors';
-import { Config } from '@/constants/config';
 import { Typography } from '@/constants/typography';
 import { ScoreBadge } from '@/components/ScoreBadge';
 import { GameCountdown } from '@/components/GameCountdown';
@@ -34,9 +33,7 @@ import { CelebrationEffect } from '@/components/CelebrationEffect';
 import { RoundResultPopup } from '@/components/RoundResultPopup';
 import {
   useAppStore,
-  type AnimalSessionPayload,
   type RoundSummary,
-  type SavedSession,
 } from '@/store/useAppStore';
 import {
   isSmallHeightDevice,
@@ -114,18 +111,6 @@ const AquariumBubble = ({ left, top, size, delay, duration }: AquariumBubbleProp
       ]}
     />
   );
-};
-
-const isAnimalSession = (
-  session: SavedSession | null
-): session is Extract<SavedSession, { game: 'animals' }> => {
-  return Boolean(session && session.game === 'animals');
-};
-
-const isSessionExpired = (updatedAt: string): boolean => {
-  const updatedMs = new Date(updatedAt).getTime();
-  if (!Number.isFinite(updatedMs)) return true;
-  return Date.now() - updatedMs > Config.game.sessionTimeout;
 };
 
 type MemoryCardProps = {
@@ -231,9 +216,6 @@ export const AnimalFlashcardsScreen = () => {
   const totalAnimalStars = useAppStore((state) => state.progression.games.animals.totalStars);
   const setCurrentGameLevel = useAppStore((state) => state.setCurrentGameLevel);
   const activateRecoveryMode = useAppStore((state) => state.activateRecoveryMode);
-  const lastSession = useAppStore((state) => state.lastSession);
-  const saveLastSession = useAppStore((state) => state.saveLastSession);
-  const clearLastSession = useAppStore((state) => state.clearLastSession);
   const activeLevel = useMemo(() => getAnimalLevelConfig(currentLevel), [currentLevel]);
   const difficultyBand = activeLevel.band as Level;
   const isCompact = isSmallHeightDevice;
@@ -273,8 +255,6 @@ export const AnimalFlashcardsScreen = () => {
   const resultRecordedRef = useRef(false);
   const roundScoreRef = useRef(0);
   const bestStreakRef = useRef(0);
-  const hasRestoredSessionRef = useRef(false);
-  const initializedLevelRef = useRef<number | null>(null);
   const [boardLayout, setBoardLayout] = useState({
     width: windowWidth - horizontalPadding * 2,
     height: boardHeight,
@@ -559,152 +539,9 @@ export const AnimalFlashcardsScreen = () => {
     resultRecordedRef.current = false;
   }, [currentLevel, setCurrentGameLevel]);
 
-  const restoreSession = useCallback((payload: AnimalSessionPayload) => {
-    const config = getAnimalLevelConfig(currentLevel);
-    const elapsedMsAtSave = Math.max(
-      0,
-      (config.durationSeconds - Math.max(0, Math.round(payload.remainingTime))) * 1000
-    );
-
-    setCards(payload.cards);
-    setOpenedCardIds(payload.openedCardIds);
-    setIsResolvingPair(payload.isResolvingPair);
-    setMoves(Math.max(0, Math.round(payload.moves)));
-    setLives(Math.max(0, Math.round(payload.lives)));
-    setStreak(Math.max(0, Math.round(payload.streak)));
-    setBestStreak(Math.max(0, Math.round(payload.bestStreak)));
-    setRoundScore(Math.max(0, Math.round(payload.roundScore)));
-    setRemainingTime(Math.max(0, Math.round(payload.remainingTime)));
-    setRoundStartedAt(payload.phase === 'playing' ? Date.now() - elapsedMsAtSave : null);
-    setFirstCardOpenedAt(payload.phase === 'playing' ? null : payload.firstCardOpenedAt);
-    setFeedbackLabel(payload.feedbackLabel);
-    setPhase(payload.phase === 'playing' ? 'playing' : 'intro');
-    setResult('none');
-    setRoundSummary(null);
-    setShowRoundResult(false);
-    roundScoreRef.current = Math.max(0, Math.round(payload.roundScore));
-    bestStreakRef.current = Math.max(0, Math.round(payload.bestStreak));
-    winBonusAwardedRef.current = false;
-    resultRecordedRef.current = false;
-  }, [currentLevel]);
-
   useEffect(() => {
-    if (hasRestoredSessionRef.current) {
-      return;
-    }
-    if (!isAnimalSession(lastSession)) {
-      return;
-    }
-    if (isSessionExpired(lastSession.updatedAt)) {
-      clearLastSession('animals');
-      return;
-    }
-    if (lastSession.level !== currentLevel) {
-      setCurrentGameLevel('animals', lastSession.level);
-      return;
-    }
-
-    restoreSession(lastSession.payload);
-    hasRestoredSessionRef.current = true;
-    initializedLevelRef.current = currentLevel;
-  }, [
-    clearLastSession,
-    currentLevel,
-    lastSession,
-    restoreSession,
-    setCurrentGameLevel,
-  ]);
-
-  useEffect(() => {
-    if (initializedLevelRef.current === currentLevel) {
-      return;
-    }
-
-    const shouldWaitForSavedLevel =
-      !hasRestoredSessionRef.current &&
-      isAnimalSession(lastSession) &&
-      !isSessionExpired(lastSession.updatedAt) &&
-      lastSession.level !== currentLevel;
-
-    if (shouldWaitForSavedLevel) {
-      return;
-    }
-
-    if (
-      !hasRestoredSessionRef.current &&
-      isAnimalSession(lastSession) &&
-      !isSessionExpired(lastSession.updatedAt) &&
-      lastSession.level === currentLevel
-    ) {
-      return;
-    }
     startNewGame(currentLevel);
-    initializedLevelRef.current = currentLevel;
-  }, [currentLevel, lastSession, startNewGame]);
-
-  useEffect(() => {
-    if (showRoundResult || result !== 'none') {
-      return;
-    }
-
-    const hasProgress =
-      phase === 'playing' ||
-      moves > 0 ||
-      roundScore > 0 ||
-      matchedPairs > 0;
-
-    if (!hasProgress) {
-      clearLastSession('animals');
-      return;
-    }
-
-    const payload: AnimalSessionPayload = {
-      cards,
-      openedCardIds,
-      isResolvingPair,
-      moves,
-      lives,
-      streak,
-      bestStreak,
-      roundScore,
-      remainingTime,
-      roundStartedAt,
-      firstCardOpenedAt,
-      feedbackLabel,
-      phase,
-    };
-
-    saveLastSession({
-      game: 'animals',
-      route: '/animal-flashcards',
-      level: currentLevel,
-      phase,
-      progressLabel: `Level ${currentLevel} • ${matchedPairs}/${totalPairs} pairs`,
-      updatedAt: new Date().toISOString(),
-      payload,
-    });
-  }, [
-    bestStreak,
-    cards,
-    clearLastSession,
-    currentLevel,
-    feedbackLabel,
-    firstCardOpenedAt,
-    isResolvingPair,
-    lives,
-    matchedPairs,
-    moves,
-    openedCardIds,
-    phase,
-    remainingTime,
-    result,
-    roundScore,
-    roundStartedAt,
-    saveLastSession,
-    showRoundResult,
-    streak,
-    totalPairs,
-  ]);
+  }, [currentLevel, startNewGame]);
 
   const handleCardPress = useCallback(
     (selectedCard: AnimalCard) => {
@@ -894,7 +731,6 @@ export const AnimalFlashcardsScreen = () => {
                 },
               ]}
               onPress={() => {
-                clearLastSession('animals');
                 goBack();
               }}
               hitSlop={SMALL_PRESSABLE_HIT_SLOP}
@@ -1024,7 +860,6 @@ export const AnimalFlashcardsScreen = () => {
             <Pressable
               style={[styles.restartButton, isCompact && styles.restartButtonCompact]}
               onPress={() => {
-                clearLastSession('animals');
                 startNewGame();
               }}
               hitSlop={SMALL_PRESSABLE_HIT_SLOP}
@@ -1040,11 +875,9 @@ export const AnimalFlashcardsScreen = () => {
         summary={roundSummary}
         gameTitle="Animal Memory"
         onPlayAgain={() => {
-          clearLastSession('animals');
           startNewGame(currentLevel);
         }}
         onPlayNext={() => {
-          clearLastSession('animals');
           const nextLevel = roundSummary?.nextLevel ?? null;
           if (nextLevel) {
             setCurrentGameLevel('animals', nextLevel);
@@ -1054,11 +887,9 @@ export const AnimalFlashcardsScreen = () => {
           startNewGame(currentLevel);
         }}
         onBackHome={() => {
-          clearLastSession('animals');
           goBack();
         }}
         onTryRecovery={(suggestedLevel) => {
-          clearLastSession('animals');
           activateRecoveryMode('animals', suggestedLevel);
           startNewGame(suggestedLevel);
         }}

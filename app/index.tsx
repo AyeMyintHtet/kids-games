@@ -6,6 +6,8 @@ import {
   StatusBar,
   TouchableOpacity,
   Switch,
+  Linking,
+  TextInput,
   useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -32,7 +34,7 @@ import { Colors } from '../src/constants/colors';
 import { Config } from '../src/constants/config';
 import { Typography } from '../src/constants/typography';
 import { useCloudTransition } from '../src/hooks/useCloudTransition';
-import { useAppStore, type SavedSession } from '../src/store/useAppStore';
+import { useAppStore } from '../src/store/useAppStore';
 import { useMusic } from './_layout'; // keep existing relative import
 
 // Utils
@@ -52,6 +54,7 @@ import { DancingButterfly } from '../src/components/home/DancingButterfly';
 import { MascotOwl } from '../src/components/home/MascotOwl';
 import { AnimatedRainbow } from '../src/components/home/AnimatedRainbow';
 import { SessionFlowCard } from '../src/components/home/SessionFlowCard';
+import { AdBanner } from '../src/components/ads/AdBanner';
 import {
   AchievementsButton,
   JourneyButton,
@@ -65,15 +68,22 @@ import {
   PROGRESSION_THEMES,
   type MathOperation,
 } from '../src/features/progression/model/progression';
+import { AD_PLACEMENTS } from '../src/features/monetization/model/ads';
 
-const isSessionExpired = (updatedAt: string): boolean => {
-  const updatedMs = new Date(updatedAt).getTime();
-  if (!Number.isFinite(updatedMs)) return true;
-  return Date.now() - updatedMs > Config.game.sessionTimeout;
+type ParentGateChallenge = {
+  left: number;
+  right: number;
+  answer: number;
 };
 
-const getResumeRoute = (session: SavedSession): '/math-game' | '/alphabet' | '/animal-flashcards' => {
-  return session.route;
+const createParentGateChallenge = (): ParentGateChallenge => {
+  const left = 12 + Math.floor(Math.random() * 38);
+  const right = 11 + Math.floor(Math.random() * 34);
+  return {
+    left,
+    right,
+    answer: left + right,
+  };
 };
 
 /**
@@ -97,6 +107,12 @@ export default function HomeScreen() {
   const [isAchievementsOpen, setIsAchievementsOpen] = useState(false);
   const [isJourneyOpen, setIsJourneyOpen] = useState(false);
   const [isParentProgressOpen, setIsParentProgressOpen] = useState(false);
+  const [isPrivacyGateOpen, setIsPrivacyGateOpen] = useState(false);
+  const [privacyGateChallenge, setPrivacyGateChallenge] = useState<ParentGateChallenge>(
+    () => createParentGateChallenge()
+  );
+  const [privacyGateInput, setPrivacyGateInput] = useState('');
+  const [privacyGateError, setPrivacyGateError] = useState<string | null>(null);
   const language = useAppStore((state) => state.settings.language);
   const unlockedAchievementsCount = useAppStore(
     (state) => state.achievements.unlocked.length
@@ -107,8 +123,6 @@ export default function HomeScreen() {
   const streak = useAppStore((state) => state.progression.streak);
   const profile = useAppStore((state) => state.profile);
   const saveProfile = useAppStore((state) => state.saveProfile);
-  const lastSession = useAppStore((state) => state.lastSession);
-  const clearLastSession = useAppStore((state) => state.clearLastSession);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const mathOperationPrefs = useAppStore((state) => state.settings.mathOperationPrefs);
   const setMathOperationEnabled = useAppStore((state) => state.setMathOperationEnabled);
@@ -116,11 +130,6 @@ export default function HomeScreen() {
     () => PROGRESSION_THEMES.find((theme) => theme.id === activeThemeId) ?? PROGRESSION_THEMES[0],
     [activeThemeId]
   );
-  const resumableSession = useMemo(() => {
-    if (!lastSession) return null;
-    if (isSessionExpired(lastSession.updatedAt)) return null;
-    return lastSession;
-  }, [lastSession]);
   const needsProfileOnboarding = !profile.nickname || !profile.gender;
   const isCompact = isSmallHeightDevice;
   const isVeryCompact = isVerySmallHeightDevice;
@@ -137,13 +146,6 @@ export default function HomeScreen() {
     : isCompact
       ? verticalScale(118)
       : verticalScale(150);
-
-  useEffect(() => {
-    if (!lastSession) return;
-    if (isSessionExpired(lastSession.updatedAt)) {
-      clearLastSession(lastSession.game);
-    }
-  }, [clearLastSession, lastSession]);
 
   // Title Animation
   const titleScale = useSharedValue(1);
@@ -209,11 +211,36 @@ export default function HomeScreen() {
     setIsParentProgressOpen(true);
   }, []);
 
-  const handleResumePress = useCallback(() => {
-    if (!resumableSession) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigateTo(getResumeRoute(resumableSession));
-  }, [navigateTo, resumableSession]);
+  const handleOpenPrivacyPolicy = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPrivacyGateError(null);
+    setPrivacyGateInput('');
+    setPrivacyGateChallenge(createParentGateChallenge());
+    setIsPrivacyGateOpen(true);
+  }, []);
+
+  const handleClosePrivacyGate = useCallback(() => {
+    setPrivacyGateError(null);
+    setPrivacyGateInput('');
+    setIsPrivacyGateOpen(false);
+  }, []);
+
+  const handleSubmitPrivacyGate = useCallback(() => {
+    const parsedAnswer = Number.parseInt(privacyGateInput.trim(), 10);
+    if (!Number.isFinite(parsedAnswer) || parsedAnswer !== privacyGateChallenge.answer) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setPrivacyGateError('Not correct yet. Try one more time.');
+      setPrivacyGateInput('');
+      setPrivacyGateChallenge(createParentGateChallenge());
+      return;
+    }
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setPrivacyGateError(null);
+    setPrivacyGateInput('');
+    setIsPrivacyGateOpen(false);
+    void Linking.openURL(Config.legal.privacyPolicyUrl);
+  }, [privacyGateChallenge.answer, privacyGateInput]);
 
   const handleSaveProfile = useCallback(
     (payload: { nickname: string; gender: 'male' | 'female' }) => {
@@ -434,10 +461,11 @@ export default function HomeScreen() {
       <View style={[styles.bottomControls, { paddingBottom: insets.bottom + 10 }]}>
         {/* <SoundButton onPress={handleSoundToggle} isMuted={isMuted} /> */}
         <ScoreBadge />
+        <AdBanner
+          placement={AD_PLACEMENTS.HOME_BANNER}
+          style={styles.homeBanner}
+        />
         <SessionFlowCard
-          canResume={Boolean(resumableSession)}
-          resumeLabel={resumableSession?.progressLabel ?? ''}
-          onResume={handleResumePress}
           completedRounds={dailyGoal.completedRounds}
           targetRounds={dailyGoal.targetRounds}
           streakDays={streak.current}
@@ -451,6 +479,7 @@ export default function HomeScreen() {
         onClose={() => setIsSettingsOpen(false)}
         title="Settings"
         variant="blue"
+        animationMode="subtle"
       >
         <View style={styles.settingsRow}>
           <Text style={styles.settingLabel}>Music 🎵</Text>
@@ -510,6 +539,14 @@ export default function HomeScreen() {
 
         <WavyDivider />
 
+        <TouchableOpacity
+          style={styles.privacyPolicyButton}
+          onPress={handleOpenPrivacyPolicy}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.privacyPolicyButtonText}>🔒 Privacy Policy</Text>
+        </TouchableOpacity>
+
         <View style={styles.settingsButtonsRow}>
           <TouchableOpacity
             style={[styles.settingsButton, { backgroundColor: Colors.primary.main }]}
@@ -534,6 +571,58 @@ export default function HomeScreen() {
         </View>
 
         <Text style={styles.versionText}>Version 1.0.0</Text>
+      </PopBox>
+
+      <PopBox
+        visible={isPrivacyGateOpen}
+        onClose={handleClosePrivacyGate}
+        title="Parent Check"
+        variant="purple"
+        animationMode="subtle"
+      >
+        <View style={styles.privacyGateBlock}>
+          <Text style={styles.privacyGateText}>
+            Adults only: solve this to open the Privacy Policy.
+          </Text>
+          <Text style={styles.privacyGateQuestion}>
+            {privacyGateChallenge.left} + {privacyGateChallenge.right} = ?
+          </Text>
+          <TextInput
+            style={styles.privacyGateInput}
+            value={privacyGateInput}
+            onChangeText={(value) => {
+              setPrivacyGateInput(value.replace(/[^0-9]/g, ''));
+              if (privacyGateError) {
+                setPrivacyGateError(null);
+              }
+            }}
+            keyboardType="number-pad"
+            returnKeyType="done"
+            placeholder="Enter answer"
+            placeholderTextColor={Colors.neutral[400]}
+            maxLength={3}
+          />
+          {privacyGateError ? (
+            <Text style={styles.privacyGateError}>{privacyGateError}</Text>
+          ) : null}
+
+          <View style={styles.privacyGateButtons}>
+            <TouchableOpacity
+              style={[styles.settingsButton, styles.privacyGateCancelButton]}
+              onPress={handleClosePrivacyGate}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.settingsButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.settingsButton, styles.privacyGateContinueButton]}
+              onPress={handleSubmitPrivacyGate}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.settingsButtonText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </PopBox>
 
       <AchievementsPopup
@@ -633,6 +722,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(16),
     zIndex: 100,
     gap: scale(8),
+  },
+  homeBanner: {
+    alignSelf: 'flex-end',
+    marginBottom: verticalScale(6),
   },
   mainContent: {
     flex: 1,
@@ -803,12 +896,72 @@ const styles = StyleSheet.create({
     fontSize: scale(11),
     color: Colors.neutral[600],
   },
+  privacyGateBlock: {
+    gap: verticalScale(10),
+    paddingTop: verticalScale(2),
+  },
+  privacyGateText: {
+    fontFamily: Typography.fontFamily.display,
+    fontSize: scale(13),
+    color: Colors.neutral[700],
+    textAlign: 'center',
+  },
+  privacyGateQuestion: {
+    fontFamily: Typography.fontFamily.display,
+    fontSize: scale(24),
+    color: Colors.fun.purple,
+    textAlign: 'center',
+  },
+  privacyGateInput: {
+    height: verticalScale(48),
+    borderRadius: scale(14),
+    borderWidth: 2,
+    borderColor: Colors.secondary[300],
+    backgroundColor: Colors.white,
+    paddingHorizontal: scale(14),
+    fontFamily: Typography.fontFamily.display,
+    fontSize: scale(20),
+    color: Colors.neutral[800],
+    textAlign: 'center',
+  },
+  privacyGateError: {
+    fontFamily: Typography.fontFamily.display,
+    fontSize: scale(12),
+    color: Colors.danger[700],
+    textAlign: 'center',
+  },
+  privacyGateButtons: {
+    flexDirection: 'row',
+    gap: scale(12),
+    marginTop: verticalScale(2),
+  },
+  privacyGateCancelButton: {
+    backgroundColor: Colors.neutral[500],
+  },
+  privacyGateContinueButton: {
+    backgroundColor: Colors.primary.main,
+  },
   settingsButtonsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 16,
-    marginTop: 20,
+    marginTop: 14,
     marginBottom: 10,
+  },
+  privacyPolicyButton: {
+    marginTop: 12,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: Colors.secondary[300],
+    backgroundColor: Colors.white,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  privacyPolicyButtonText: {
+    fontFamily: Typography.fontFamily.display,
+    fontSize: 15,
+    color: Colors.secondary[800],
   },
   settingsButton: {
     flex: 1,

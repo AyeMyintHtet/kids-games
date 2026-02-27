@@ -6,7 +6,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Animated, { Easing, useSharedValue, useAnimatedStyle, withSpring, withSequence, withTiming, withRepeat } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/colors';
-import { Config } from '@/constants/config';
 import { TactileButton } from '@/components/TactileButton';
 import { GameCountdown } from '@/components/GameCountdown';
 import { GiveUpModal } from '@/components/GiveUpModal';
@@ -14,9 +13,7 @@ import { RoundResultPopup } from '@/components/RoundResultPopup';
 import { ScoreBadge } from '@/components/ScoreBadge';
 import {
   useAppStore,
-  type AlphabetSessionPayload,
   type RoundSummary,
-  type SavedSession,
 } from '@/store/useAppStore';
 import {
   ALPHABET,
@@ -125,18 +122,6 @@ const AnimatedLetterButton = ({
   );
 };
 
-const isAlphabetSession = (
-  session: SavedSession | null
-): session is Extract<SavedSession, { game: 'alphabet' }> => {
-  return Boolean(session && session.game === 'alphabet');
-};
-
-const isSessionExpired = (updatedAt: string): boolean => {
-  const updatedMs = new Date(updatedAt).getTime();
-  if (!Number.isFinite(updatedMs)) return true;
-  return Date.now() - updatedMs > Config.game.sessionTimeout;
-};
-
 export const AlphabetGameScreen = () => {
   const { replaceTo } = useCloudTransition();
   const insets = useSafeAreaInsets();
@@ -147,9 +132,6 @@ export const AlphabetGameScreen = () => {
   const currentLevel = useAppStore((state) => state.progression.games.alphabet.currentLevel);
   const setCurrentGameLevel = useAppStore((state) => state.setCurrentGameLevel);
   const activateRecoveryMode = useAppStore((state) => state.activateRecoveryMode);
-  const lastSession = useAppStore((state) => state.lastSession);
-  const saveLastSession = useAppStore((state) => state.saveLastSession);
-  const clearLastSession = useAppStore((state) => state.clearLastSession);
   const levelConfig = useMemo(() => getAlphabetLevelConfig(currentLevel), [currentLevel]);
   const targetAlphabet = useMemo(
     () => ALPHABET.slice(0, levelConfig.letterCount),
@@ -173,8 +155,6 @@ export const AlphabetGameScreen = () => {
   const [roundSummary, setRoundSummary] = useState<RoundSummary | null>(null);
   const [showRoundResult, setShowRoundResult] = useState(false);
   const resultRecordedRef = useRef(false);
-  const hasRestoredSessionRef = useRef(false);
-  const initializedLevelRef = useRef<number | null>(null);
   const isCompact = isSmallHeightDevice;
   const isVeryCompact = isVerySmallHeightDevice;
   const isNarrow = windowWidth <= 360;
@@ -224,9 +204,8 @@ export const AlphabetGameScreen = () => {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
-  const startNewRound = (targetLevel?: number) => {
-    const level = targetLevel ?? currentLevel;
-    const lettersForLevel = ALPHABET.slice(0, getAlphabetLevelConfig(level).letterCount);
+  const startNewRound = (_targetLevel?: number) => {
+    const lettersForLevel = ALPHABET;
     const now = Date.now();
     setShuffledLetters(shuffleLetters(lettersForLevel));
     setNextLetterIndex(0);
@@ -270,52 +249,6 @@ export const AlphabetGameScreen = () => {
       outcome,
     });
   }, [currentLevel, recordGameResult]);
-
-  const restoreSession = (payload: AlphabetSessionPayload, updatedAt: string) => {
-    const updatedMs = new Date(updatedAt).getTime();
-    const safeElapsed = Math.max(0, Math.round(payload.elapsedMs));
-    const resumedRoundStartedAt =
-      payload.phase === 'playing' && Number.isFinite(updatedMs)
-        ? updatedMs - safeElapsed
-        : payload.roundStartedAt;
-
-    setShuffledLetters(payload.shuffledLetters);
-    setNextLetterIndex(Math.max(0, Math.round(payload.nextLetterIndex)));
-    setCorrectLetters(new Set(payload.correctLetters));
-    setShakeTickByLetter(payload.shakeTickByLetter);
-    setRoundScore(Math.max(0, Math.round(payload.roundScore)));
-    setStreak(Math.max(0, Math.round(payload.streak)));
-    setBestStreak(Math.max(0, Math.round(payload.bestStreak)));
-    setWrongCount(Math.max(0, Math.round(payload.wrongCount)));
-    setRoundStartedAt(resumedRoundStartedAt);
-    setLetterStartedAt(payload.phase === 'playing' ? Date.now() : payload.letterStartedAt);
-    setElapsedMs(safeElapsed);
-    setRoundSummary(null);
-    setShowRoundResult(false);
-    setGamePhase(payload.phase === 'playing' ? 'playing' : 'intro');
-    resultRecordedRef.current = false;
-  };
-
-  useEffect(() => {
-    if (hasRestoredSessionRef.current) {
-      return;
-    }
-    if (!isAlphabetSession(lastSession)) {
-      return;
-    }
-    if (isSessionExpired(lastSession.updatedAt)) {
-      clearLastSession('alphabet');
-      return;
-    }
-    if (lastSession.level !== currentLevel) {
-      setCurrentGameLevel('alphabet', lastSession.level);
-      return;
-    }
-
-    restoreSession(lastSession.payload, lastSession.updatedAt);
-    hasRestoredSessionRef.current = true;
-    initializedLevelRef.current = currentLevel;
-  }, [clearLastSession, currentLevel, lastSession, setCurrentGameLevel]);
 
   const handleLetterPress = useCallback((letter: string) => {
     if (gamePhase !== 'playing' || isRoundComplete || correctLetters.has(letter)) {
@@ -441,7 +374,6 @@ export const AlphabetGameScreen = () => {
       }
       return;
     }
-    clearLastSession('alphabet');
     replaceTo('/');
   };
 
@@ -489,92 +421,9 @@ export const AlphabetGameScreen = () => {
   }, [gamePhase, isRoundComplete, roundStartedAt]);
 
   useEffect(() => {
-    if (initializedLevelRef.current === currentLevel) {
-      return;
-    }
-
-    const shouldWaitForSavedLevel =
-      !hasRestoredSessionRef.current &&
-      isAlphabetSession(lastSession) &&
-      !isSessionExpired(lastSession.updatedAt) &&
-      lastSession.level !== currentLevel;
-
-    if (shouldWaitForSavedLevel) {
-      return;
-    }
-
-    if (
-      !hasRestoredSessionRef.current &&
-      isAlphabetSession(lastSession) &&
-      !isSessionExpired(lastSession.updatedAt) &&
-      lastSession.level === currentLevel
-    ) {
-      return;
-    }
     startNewRound(currentLevel);
-    initializedLevelRef.current = currentLevel;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentLevel, lastSession]);
-
-  useEffect(() => {
-    if (showRoundResult) {
-      return;
-    }
-
-    const hasProgress =
-      gamePhase === 'playing' ||
-      nextLetterIndex > 0 ||
-      wrongCount > 0 ||
-      roundScore > 0;
-
-    if (!hasProgress) {
-      clearLastSession('alphabet');
-      return;
-    }
-
-    const payload: AlphabetSessionPayload = {
-      shuffledLetters,
-      nextLetterIndex,
-      correctLetters: Array.from(correctLetters),
-      shakeTickByLetter,
-      roundScore,
-      streak,
-      bestStreak,
-      wrongCount,
-      roundStartedAt,
-      letterStartedAt,
-      elapsedMs,
-      phase: gamePhase,
-    };
-
-    saveLastSession({
-      game: 'alphabet',
-      route: '/alphabet',
-      level: currentLevel,
-      phase: gamePhase,
-      progressLabel: `Level ${currentLevel} • ${nextLetterIndex}/${targetAlphabet.length} letters`,
-      updatedAt: new Date().toISOString(),
-      payload,
-    });
-  }, [
-    bestStreak,
-    clearLastSession,
-    correctLetters,
-    currentLevel,
-    elapsedMs,
-    gamePhase,
-    letterStartedAt,
-    nextLetterIndex,
-    roundScore,
-    roundStartedAt,
-    saveLastSession,
-    shakeTickByLetter,
-    showRoundResult,
-    shuffledLetters,
-    streak,
-    targetAlphabet.length,
-    wrongCount,
-  ]);
+  }, [currentLevel]);
 
 
 
@@ -742,11 +591,9 @@ export const AlphabetGameScreen = () => {
         summary={roundSummary}
         gameTitle="Alphabet Fun"
         onPlayAgain={() => {
-          clearLastSession('alphabet');
           startNewRound(currentLevel);
         }}
         onPlayNext={() => {
-          clearLastSession('alphabet');
           const nextLevel = roundSummary?.nextLevel ?? null;
           if (nextLevel) {
             setCurrentGameLevel('alphabet', nextLevel);
@@ -756,11 +603,9 @@ export const AlphabetGameScreen = () => {
           startNewRound(currentLevel);
         }}
         onBackHome={() => {
-          clearLastSession('alphabet');
           replaceTo('/');
         }}
         onTryRecovery={(suggestedLevel) => {
-          clearLastSession('alphabet');
           activateRecoveryMode('alphabet', suggestedLevel);
           startNewRound(suggestedLevel);
         }}
