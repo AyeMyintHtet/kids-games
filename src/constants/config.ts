@@ -5,8 +5,8 @@
 
 export const Config = {
   // App info
-  APP_NAME: 'Kids Games',
-  APP_VERSION: '1.0.0',
+  APP_NAME: 'Learny Land',
+  APP_VERSION: '1.0.1',
 
   // Feature flags
   features: {
@@ -26,14 +26,14 @@ export const Config = {
   legal: {
     // Must be a public URL for app store policy compliance.
     privacyPolicyUrl:
-      'https://raw.githubusercontent.com/AyeMyintHtet/kids-games/main/PRIVACY_POLICY.md',
+      'https://github.com/AyeMyintHtet/kids-games/blob/main/PRIVACY_POLICY.md',
   },
 
-  // Monetization (Android-first, child-directed)
+  // Monetization (disabled for children-only release)
   monetization: {
-    adsEnabled: true,
-    bannerEnabled: true,
-    interstitialEnabled: true,
+    adsEnabled: false,
+    bannerEnabled: false,
+    interstitialEnabled: false,
     androidOnlyMonetization: true,
     interstitialCooldownSec: 180,
     interstitialMaxPerDay: 6,

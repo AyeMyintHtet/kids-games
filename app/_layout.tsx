@@ -108,6 +108,11 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    if (!Config.monetization.adsEnabled) {
+      setRemoteAdsEnabled(false);
+      return;
+    }
+
     let cancelled = false;
 
     const syncRemoteAdsFlag = async () => {

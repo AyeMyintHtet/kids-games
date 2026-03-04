@@ -1,4 +1,4 @@
-# Kids Games 🎮
+# Learny Land 🎮
 
 A React Native (Expo) application for children's educational games built with the **2026 Senior Engineer Standard**.
 

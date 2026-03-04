@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../src/constants/colors';
+import { Config } from '../src/constants/config';
 import { TactileButton } from '../src/components/TactileButton';
 import { useAppStore } from '../src/store/useAppStore';
 import type { MathOperation } from '../src/features/progression/model/progression';
@@ -122,7 +123,7 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.infoSection}>
-            <Text style={styles.versionText}>Version 1.0.0</Text>
+            <Text style={styles.versionText}>Version {Config.APP_VERSION}</Text>
           </View>
         </ScrollView>
       </SafeAreaView>

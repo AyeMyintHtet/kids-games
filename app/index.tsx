@@ -558,19 +558,9 @@ export default function HomeScreen() {
           >
             <Text style={styles.settingsButtonText}>⭐️ Save</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.settingsButton, { backgroundColor: Colors.fun.purple }]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.settingsButtonText}>Reset</Text>
-          </TouchableOpacity>
         </View>
 
-        <Text style={styles.versionText}>Version 1.0.0</Text>
+        <Text style={styles.versionText}>Version {Config.APP_VERSION}</Text>
       </PopBox>
 
       <PopBox
